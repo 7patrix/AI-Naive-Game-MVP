@@ -47,6 +47,28 @@
 - 清除 cookie。
 - 重定向回首页。
 
+### GET `/api/auth/github/start`
+
+用途：发起 GitHub OAuth 登录。
+
+行为：
+
+- 检查 `GITHUB_CLIENT_ID`。
+- 创建 OAuth state cookie。
+- 重定向到 GitHub 授权页。
+
+### GET `/api/auth/github/callback`
+
+用途：处理 GitHub OAuth 回调。
+
+行为：
+
+- 校验 state。
+- 交换 access token。
+- 获取 GitHub 用户和邮箱。
+- 根据 `OAuthAccount` 查找或绑定本地用户。
+- 创建 session。
+
 ## 生成任务接口
 
 ### POST `/api/generation-jobs`
@@ -68,6 +90,39 @@
 - 将上传文件摘要写回 `GenerationJob.inputFiles`。
 - 303 重定向回 `/create?job=<jobId>`。
 
+### POST `/api/generation-jobs/[id]/retry`
+
+用途：重试失败任务。
+
+行为：
+
+- 只允许任务 owner 操作。
+- 只允许 `FAILED` 状态任务重试。
+- 将任务状态重置为 `PENDING`，进度归零。
+- 写入 `job_retried` 日志。
+
+## 游戏互动接口
+
+### POST `/api/games/[id]/like`
+
+用途：登录用户点赞或取消点赞游戏。
+
+行为：
+
+- 未登录跳转登录。
+- 已点赞则取消。
+- 未点赞则创建 `GameLike`。
+
+### POST `/api/games/[id]/favorite`
+
+用途：登录用户收藏或取消收藏游戏。
+
+行为：
+
+- 未登录跳转登录。
+- 已收藏则取消。
+- 未收藏则创建 `GameFavorite`。
+
 ## 页面数据流
 
 ### Home `/`
@@ -81,6 +136,12 @@
 - 标签
 - 发布时间
 - 游玩次数
+
+支持：
+
+- 关键词搜索
+- 标签筛选
+- 最新发布、最多游玩、最多点赞排序
 
 ### Game Detail `/games/[slug]`
 

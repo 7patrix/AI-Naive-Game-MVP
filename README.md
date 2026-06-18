@@ -101,19 +101,34 @@ MinIO 默认账号：
 - Play 页远端 Manifest 加载
 - iframe sandbox 动态运行远端游戏
 - `GameEvent` 埋点和 `playCount`
+- Home 搜索、标签筛选、排序
+- 游戏点赞和收藏
+- 生成任务自动刷新和失败重试
+- 详情页展示游玩埋点统计
+- 可配置 GitHub OAuth 登录
+- OpenAI-compatible LLM 可选接入，失败自动 fallback
 
 ## 当前取舍
 
-当前 MVP 默认使用本地 fallback generator 生成 Canvas HTML 小游戏，没有调用真实 LLM API。这样可以保证 Demo 在没有 API Key 的情况下稳定运行。
+当前 MVP 默认使用本地 fallback generator 生成 Canvas HTML 小游戏。配置 `OPENAI_API_KEY` 后，`PlannerAgent` 和 `CoderAgent` 会优先调用 OpenAI-compatible Chat Completions API；如果没有 Key 或调用失败，会自动回退到本地生成器。
 
 系统已经预留真实模型接入点：
 
 ```text
 OPENAI_API_KEY=""
+OPENAI_BASE_URL="https://api.openai.com/v1"
 MODEL_NAME="gpt-5.5"
 ```
 
 后续可将 `PlannerAgent` 和 `CoderAgent` 替换为真实模型调用，保留任务、日志、对象存储、Manifest 和 Play 运行协议。
+
+GitHub OAuth 是可选能力。配置以下变量后，登录页的“使用 GitHub 登录”可以真实跑通：
+
+```text
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
+GITHUB_REDIRECT_URI="http://localhost:3000/api/auth/github/callback"
+```
 
 ## 文档
 

@@ -1,25 +1,67 @@
 import Link from "next/link";
-import { GameStatus } from "@prisma/client";
+import { GameStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+
+type HomePageProps = {
+  searchParams: Promise<{
+    q?: string;
+    tag?: string;
+    sort?: string;
+  }>;
+};
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const params = await searchParams;
+  const query = params.q?.trim() ?? "";
+  const tag = params.tag?.trim() ?? "";
+  const sort = params.sort ?? "latest";
+  const where: Prisma.GameWhereInput = {
+    status: GameStatus.PUBLISHED,
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query, mode: "insensitive" } },
+            { description: { contains: query, mode: "insensitive" } },
+            { tags: { has: query } },
+            { author: { name: { contains: query, mode: "insensitive" } } },
+            { author: { email: { contains: query, mode: "insensitive" } } }
+          ]
+        }
+      : {}),
+    ...(tag ? { tags: { has: tag } } : {})
+  };
+
   const games = await db.game.findMany({
-    where: {
-      status: GameStatus.PUBLISHED
-    },
+    where,
     include: {
       author: {
         select: {
           name: true,
           email: true
         }
+      },
+      _count: {
+        select: {
+          likes: true,
+          favorites: true
+        }
       }
     },
     orderBy: {
       publishedAt: "desc"
     }
+  });
+  const publishedGames = await db.game.findMany({
+    where: { status: GameStatus.PUBLISHED },
+    select: { tags: true }
+  });
+  const allTags = Array.from(new Set(publishedGames.flatMap((game) => game.tags))).sort();
+  const sortedGames = [...games].sort((left, right) => {
+    if (sort === "plays") return right.playCount - left.playCount;
+    if (sort === "likes") return right._count.likes - left._count.likes;
+    return (right.publishedAt?.getTime() ?? 0) - (left.publishedAt?.getTime() ?? 0);
   });
 
   return (
@@ -55,9 +97,42 @@ export default async function HomePage() {
             </p>
           </div>
         </div>
-        {games.length > 0 ? (
+        <form className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_180px_180px_auto]">
+          <input
+            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+            defaultValue={query}
+            name="q"
+            placeholder="搜索标题、简介、作者或标签"
+            type="search"
+          />
+          <select
+            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+            defaultValue={tag}
+            name="tag"
+          >
+            <option value="">全部标签</option>
+            {allTags.map((tagOption) => (
+              <option key={tagOption} value={tagOption}>
+                {tagOption}
+              </option>
+            ))}
+          </select>
+          <select
+            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+            defaultValue={sort}
+            name="sort"
+          >
+            <option value="latest">最新发布</option>
+            <option value="plays">最多游玩</option>
+            <option value="likes">最多点赞</option>
+          </select>
+          <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">
+            筛选
+          </button>
+        </form>
+        {sortedGames.length > 0 ? (
           <div className="grid gap-5 md:grid-cols-3">
-            {games.map((game) => (
+            {sortedGames.map((game) => (
               <article
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                 key={game.id}
@@ -87,9 +162,12 @@ export default async function HomePage() {
                     <span>作者：{game.author.name ?? game.author.email}</span>
                     <span>{game.playCount} 次游玩</span>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    发布时间：{game.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}
-                  </p>
+                  <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                    <span>发布时间：{game.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}</span>
+                    <span>
+                      {game._count.likes} 赞 / {game._count.favorites} 收藏
+                    </span>
+                  </div>
                   <Link
                     className="mt-5 inline-flex w-full justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
                     href={`/games/${game.slug}`}

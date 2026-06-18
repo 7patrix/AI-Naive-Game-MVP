@@ -1,5 +1,6 @@
 import { GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
 import type { RemoteGameManifest } from "../../src/lib/game-manifest";
+import { completeJson, completeText, hasModelConfig } from "../../src/lib/model-client";
 import { uploadObject } from "../../src/lib/storage";
 
 const prisma = new PrismaClient();
@@ -18,6 +19,8 @@ type BundlePlan = {
   entry: string;
   runtime: string;
   files: string[];
+  generator: "llm" | "fallback";
+  html?: string;
 };
 
 function wait(ms: number) {
@@ -300,7 +303,8 @@ async function updateProgress(jobId: string, progress: number) {
 }
 
 async function runPlannerAgent(job: Job) {
-  const spec: GameSpec = {
+  let source: "llm" | "fallback" = "fallback";
+  let spec: GameSpec = {
     title: buildTitle(job.prompt),
     genre: "Arcade",
     coreLoop: "玩家通过键盘或鼠标操作角色，躲避障碍并获得分数。",
@@ -309,7 +313,24 @@ async function runPlannerAgent(job: Job) {
     tags: ["AI生成", "Arcade", "Canvas"]
   };
 
-  await addLog(job.id, "PlannerAgent", "spec_created", "已将用户创意整理为游戏规格。", spec);
+  if (hasModelConfig()) {
+    try {
+      spec = await completeJson<GameSpec>(
+        "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。",
+        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}`
+      );
+      source = "llm";
+    } catch (error) {
+      await addLog(job.id, "PlannerAgent", "llm_fallback", "模型生成规格失败，已回退到本地规格生成器。", {
+        error: error instanceof Error ? error.message : "unknown"
+      });
+    }
+  }
+
+  await addLog(job.id, "PlannerAgent", "spec_created", "已将用户创意整理为游戏规格。", {
+    source,
+    spec
+  });
   await updateProgress(job.id, 30);
   return spec;
 }
@@ -318,14 +339,32 @@ async function runCoderAgent(job: Job, spec: GameSpec) {
   const bundlePlan: BundlePlan = {
     entry: "index.html",
     runtime: "iframe sandbox",
-    files: ["index.html", "manifest.json"]
+    files: ["index.html", "manifest.json"],
+    generator: "fallback"
   };
+
+  if (hasModelConfig()) {
+    try {
+      const html = await completeText(
+        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止请求网络资源，使用内联 CSS/JS 和 Canvas。",
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}`
+      );
+      if (html.includes("<html") && html.includes("</html>")) {
+        bundlePlan.html = html;
+        bundlePlan.generator = "llm";
+      }
+    } catch (error) {
+      await addLog(job.id, "CoderAgent", "llm_fallback", "模型生成代码失败，已回退到本地 HTML 生成器。", {
+        error: error instanceof Error ? error.message : "unknown"
+      });
+    }
+  }
 
   await addLog(
     job.id,
     "CoderAgent",
     "bundle_planned",
-    "已规划 Web 游戏产物结构，下一阶段会生成实际 bundle 文件。",
+    `已规划 Web 游戏产物结构，代码来源：${bundlePlan.generator}。`,
     { spec, bundlePlan }
   );
   await updateProgress(job.id, 55);
@@ -349,7 +388,7 @@ async function runReviewerAgent(job: Job, bundlePlan: BundlePlan) {
 
 async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePlan, checks: object) {
   const storagePrefix = `games/${job.id}`;
-  const html = generateGameHtml(spec, job);
+  const html = bundlePlan.html ?? generateGameHtml(spec, job);
   const htmlUpload = await uploadObject({
     key: `${storagePrefix}/index.html`,
     body: html,

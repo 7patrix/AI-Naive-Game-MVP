@@ -15,6 +15,9 @@
 
 - 从 PostgreSQL 读取所有已发布游戏。
 - 展示封面、标题、作者、简介、标签、发布时间和游玩次数。
+- 支持搜索标题、简介、作者和标签。
+- 支持标签筛选。
+- 支持按最新发布、最多游玩、最多点赞排序。
 - seed 数据包含 3 个示例游戏。
 - Create 流程生成的新游戏会自动出现在首页。
 
@@ -25,6 +28,9 @@
 - 上传文件进入 MinIO。
 - 创建 `GenerationJob`。
 - 展示任务状态、进度、上传文件和 Agent 日志。
+- 有运行中任务时自动刷新页面。
+- 失败任务支持重试。
+- 任务完成后展示 Manifest 和 Bundle 产物地址。
 - Worker 异步处理生成任务。
 
 ### Agent 工作流
@@ -52,10 +58,20 @@
 - 使用 iframe sandbox 运行远端 HTML 游戏。
 - 写入 `GameEvent`。
 - `playCount` 自增。
+- 详情页展示 `PLAY_START`、`PLAY_LOADED`、`PLAY_ERROR` 统计。
+
+### 产品加分项
+
+- 游戏点赞。
+- 游戏收藏。
+- 详情页最近游玩事件展示。
+- GitHub OAuth 可配置接入。
+- Google OAuth 数据模型和扩展方式在文档中说明。
+- OpenAI-compatible LLM 可选接入，失败自动 fallback。
 
 ## Mock / fallback 部分
 
-当前没有接入真实 LLM API。游戏生成使用本地 fallback generator，原因是：
+当前默认不强依赖真实 LLM API。游戏生成使用本地 fallback generator，原因是：
 
 - 确保 Demo 在没有 API Key 时稳定运行。
 - 避免模型输出不可控导致短周期演示失败。
@@ -64,18 +80,16 @@
 但系统已经保留真实模型接入点：
 
 - `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
 - `MODEL_NAME`
 - `PlannerAgent`
 - `CoderAgent`
 
 ## 未完成
 
-- Google/GitHub OAuth 真实接入。
-- 搜索和标签筛选。
-- 点赞、收藏。
+- Google OAuth 真实接入。
 - Remix 派生。
 - 版本管理。
-- 失败重试 UI。
 - 生成成本统计。
 - 内容审核。
 - 生产级代码沙箱。

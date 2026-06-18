@@ -50,6 +50,7 @@ http://localhost:3000
 - 能看到 3 个 seed 游戏。
 - 能看到通过 Create 生成的新游戏。
 - 游戏卡片包含封面、标题、作者、简介、标签、发布时间、游玩次数。
+- 可以使用搜索框、标签筛选和排序。
 
 ### 2. 注册/登录
 
@@ -92,6 +93,8 @@ http://localhost:3000/create
 - 创建 `GenerationJob`。
 - 页面显示任务状态、进度和 Agent 日志。
 - Worker 处理后状态变为 `SUCCEEDED`。
+- 失败任务会显示重试按钮。
+- 任务完成后能看到 Manifest 和 Bundle 地址。
 
 ### 4. 对象存储
 
@@ -123,6 +126,54 @@ minioadmin
 - iframe 加载 MinIO 中的远端 HTML 游戏。
 - 可以用方向键或 WASD 控制飞船。
 - 数据库中 `playCount` 自增，并写入 `GameEvent`。
+- 详情页能看到 `PLAY_START`、`PLAY_LOADED`、`PLAY_ERROR` 统计。
+
+### 6. 点赞和收藏
+
+登录后进入任意游戏详情页。
+
+预期：
+
+- 点击“点赞”会增加点赞数。
+- 再次点击会取消点赞。
+- 点击“收藏”会增加收藏数。
+- 再次点击会取消收藏。
+
+### 7. GitHub OAuth
+
+配置：
+
+```text
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
+```
+
+预期：
+
+- 登录页点击“使用 GitHub 登录”后进入 GitHub 授权页。
+- 回调后创建或绑定本地账号，并进入 `/create`。
+
+未配置时：
+
+- GitHub 登录会提示尚未配置。
+- 邮箱登录不受影响。
+
+### 8. LLM 可选接入
+
+配置：
+
+```text
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+MODEL_NAME=gpt-5.5
+```
+
+预期：
+
+- 有 Key 时 Planner/Coder 优先调用模型。
+- 无 Key 或模型调用失败时自动 fallback。
+- AgentLog 中会记录模型来源或 fallback 行为。
 
 ## 已知风险
 

@@ -51,6 +51,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           去注册
         </Link>
       </p>
+      <div className="my-6 flex items-center gap-3 text-xs text-slate-400">
+        <div className="h-px flex-1 bg-slate-200" />
+        或
+        <div className="h-px flex-1 bg-slate-200" />
+      </div>
+      <a
+        className="flex w-full justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-800"
+        href="/api/auth/github/start"
+      >
+        使用 GitHub 登录
+      </a>
     </div>
   );
 }

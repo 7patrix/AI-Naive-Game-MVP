@@ -66,6 +66,16 @@ export default async function PlayPage({ params }: PlayPageProps) {
       data: {
         gameId: game.id,
         userId: user?.id,
+        type: GameEventType.PLAY_START,
+        metadata: {
+          manifestUrl: game.manifestUrl
+        }
+      }
+    }),
+    db.gameEvent.create({
+      data: {
+        gameId: game.id,
+        userId: user?.id,
         type: manifest ? GameEventType.PLAY_LOADED : GameEventType.PLAY_ERROR,
         metadata: {
           manifestUrl: game.manifestUrl,

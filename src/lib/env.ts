@@ -47,7 +47,14 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   S3_PUBLIC_BASE_URL: z.string().url().default("http://localhost:9000/ai-arcade"),
   OPENAI_API_KEY: z.string().optional(),
-  MODEL_NAME: z.string().default("gpt-5.5")
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  MODEL_NAME: z.string().default("gpt-5.5"),
+  GITHUB_CLIENT_ID: z.string().optional(),
+  GITHUB_CLIENT_SECRET: z.string().optional(),
+  GITHUB_REDIRECT_URI: z
+    .string()
+    .url()
+    .default("http://localhost:3000/api/auth/github/callback")
 });
 
 export const env = envSchema.parse(process.env);

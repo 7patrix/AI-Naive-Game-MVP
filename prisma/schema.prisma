@@ -47,6 +47,9 @@ model User {
   uploads      UploadedAsset[]
   jobs         GenerationJob[]
   events       GameEvent[]
+  likes        GameLike[]
+  favorites    GameFavorite[]
+  oauthAccounts OAuthAccount[]
 }
 
 model Session {
@@ -81,9 +84,50 @@ model Game {
   author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdByJob   GenerationJob?  @relation("GeneratedGame", fields: [createdByJobId], references: [id])
   events         GameEvent[]
+  likes          GameLike[]
+  favorites      GameFavorite[]
 
   @@index([authorId])
   @@index([status, publishedAt])
+}
+
+model OAuthAccount {
+  id                String   @id @default(cuid())
+  provider          String
+  providerAccountId String
+  email             String?
+  userId            String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@index([email])
+}
+
+model GameLike {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([gameId])
+}
+
+model GameFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([gameId])
 }
 
 model GenerationJob {

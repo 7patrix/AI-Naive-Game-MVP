@@ -90,12 +90,13 @@ PENDING -> RUNNING -> SUCCEEDED / FAILED
 
 ## 模型接入说明
 
-当前 MVP 没有调用外部 LLM API，默认使用 fallback generator 保证 Demo 在无 API Key、无网络、无额度的情况下稳定运行。
+当前 MVP 不强依赖外部 LLM API。配置模型环境变量后，`PlannerAgent` 和 `CoderAgent` 会优先调用 OpenAI-compatible Chat Completions API；未配置或调用失败时，自动使用 fallback generator，保证 Demo 稳定运行。
 
 预留环境变量：
 
 ```text
 OPENAI_API_KEY=""
+OPENAI_BASE_URL=https://api.openai.com/v1
 MODEL_NAME="gpt-5.5"
 ```
 
@@ -107,3 +108,12 @@ MODEL_NAME="gpt-5.5"
 4. PublisherAgent 保持工程发布边界不变。
 
 这样即使更换模型供应商，也不会影响对象存储、数据库、Play 协议和发布流程。
+
+## 日志标记
+
+AgentLog 会记录当前阶段使用的来源：
+
+- `llm`：真实模型生成。
+- `fallback`：本地生成器生成。
+
+如果模型调用失败，会额外写入 `llm_fallback` 日志，说明失败原因和回退行为。

@@ -51,8 +51,11 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
       },
       game: {
         select: {
+          id: true,
           slug: true,
-          title: true
+          title: true,
+          manifestUrl: true,
+          bundleUrl: true
         }
       }
     },
@@ -61,9 +64,13 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     },
     take: 8
   });
+  const shouldRefresh = jobs.some(
+    (job) => job.status === GenerationJobStatus.PENDING || job.status === GenerationJobStatus.RUNNING
+  );
 
   return (
     <div className="space-y-8">
+      {shouldRefresh ? <meta httpEquiv="refresh" content="5" /> : null}
       {params.job ? (
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
           生成任务已创建：<span className="font-mono">{params.job}</span>。Worker 会异步处理它。
@@ -132,7 +139,9 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
             </p>
             <h2 className="mt-3 text-2xl font-bold text-slate-950">最近生成任务</h2>
           </div>
-          <p className="text-sm text-slate-500">刷新页面可查看最新状态；后续会加入自动轮询。</p>
+          <p className="text-sm text-slate-500">
+            有运行中任务时页面会每 5 秒自动刷新；失败任务可手动重试。
+          </p>
         </div>
 
         {jobs.length > 0 ? (
@@ -183,12 +192,27 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
                 </div>
 
                 {job.game ? (
-                  <a
-                    className="mt-4 inline-flex rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
-                    href={`/games/${job.game.slug}`}
-                  >
-                    查看已发布游戏：{job.game.title}
-                  </a>
+                  <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-xs text-emerald-900">
+                    <p className="font-semibold">发布产物</p>
+                    <p className="mt-2 break-all">Manifest：{job.game.manifestUrl}</p>
+                    <p className="mt-1 break-all">Bundle：{job.game.bundleUrl}</p>
+                    <a
+                      className="mt-3 inline-flex rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+                      href={`/games/${job.game.slug}`}
+                    >
+                      查看已发布游戏：{job.game.title}
+                    </a>
+                  </div>
+                ) : null}
+                {job.status === GenerationJobStatus.FAILED ? (
+                  <form action={`/api/generation-jobs/${job.id}/retry`} className="mt-4" method="post">
+                    <button
+                      className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+                      type="submit"
+                    >
+                      重试任务
+                    </button>
+                  </form>
                 ) : null}
               </article>
             ))}
