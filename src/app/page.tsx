@@ -87,6 +87,9 @@ export default async function HomePage() {
                     <span>作者：{game.author.name ?? game.author.email}</span>
                     <span>{game.playCount} 次游玩</span>
                   </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    发布时间：{game.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}
+                  </p>
                   <Link
                     className="mt-5 inline-flex w-full justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
                     href={`/games/${game.slug}`}
