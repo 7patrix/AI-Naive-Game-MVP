@@ -1,0 +1,56 @@
+import Link from "next/link";
+
+type LoginPageProps = {
+  searchParams: Promise<{
+    error?: string;
+    next?: string;
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+
+  return (
+    <div className="mx-auto max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">账号</p>
+      <h1 className="mt-3 text-3xl font-bold text-slate-950">登录</h1>
+      <p className="mt-3 text-sm leading-6 text-slate-600">
+        使用邮箱登录后，可以访问创作者功能并发布生成的游戏。
+      </p>
+      {params.error ? (
+        <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {params.error}
+        </div>
+      ) : null}
+      <form action="/api/auth/login" className="mt-6 space-y-4" method="post">
+        <input name="next" type="hidden" value={params.next ?? ""} />
+        <input
+          className="w-full rounded-xl border border-slate-300 px-4 py-3"
+          name="email"
+          placeholder="邮箱，例如 creator@example.com"
+          required
+          type="email"
+        />
+        <input
+          className="w-full rounded-xl border border-slate-300 px-4 py-3"
+          name="password"
+          placeholder="密码"
+          required
+          type="password"
+        />
+        <button
+          className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white"
+          type="submit"
+        >
+          登录
+        </button>
+      </form>
+      <p className="mt-5 text-center text-sm text-slate-600">
+        还没有账号？{" "}
+        <Link className="font-semibold text-indigo-700" href="/register">
+          去注册
+        </Link>
+      </p>
+    </div>
+  );
+}
