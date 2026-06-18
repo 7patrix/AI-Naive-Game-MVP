@@ -31,9 +31,19 @@ npm run worker
 
 ```bash
 npm run typecheck
+npm run build
 ```
 
 结果：通过。
+
+本轮数据库迁移：
+
+```bash
+npx prisma validate
+npx prisma migrate dev --skip-generate
+```
+
+结果：通过。`npx prisma generate` 在 Windows 环境下遇到 Prisma query engine DLL 文件锁，需要释放占用后重跑。
 
 ## 手工验收步骤
 
@@ -92,6 +102,7 @@ http://localhost:3000/create
 
 - 创建 `GenerationJob`。
 - 页面显示任务状态、进度和 Agent 日志。
+- 页面显示审核状态和生成成本估算。
 - Worker 处理后状态变为 `SUCCEEDED`。
 - 失败任务会显示重试按钮。
 - 任务完成后能看到 Manifest 和 Bundle 地址。
@@ -114,7 +125,7 @@ minioadmin
 预期：
 
 - bucket `ai-arcade` 存在。
-- 能看到 `games/{jobId}/index.html`、`manifest.json` 和 `cover.svg`。
+- 能看到 `games/{jobId}/v1/index.html`、`manifest.json` 和 `cover.svg`。
 
 ### 5. Play
 
@@ -128,7 +139,26 @@ minioadmin
 - 数据库中 `playCount` 自增，并写入 `GameEvent`。
 - 详情页能看到 `PLAY_START`、`PLAY_LOADED`、`PLAY_ERROR` 统计。
 
-### 6. 点赞和收藏
+### 6. Remix 与版本
+
+登录后进入任意游戏详情页，点击“Remix 派生这个游戏”。
+
+预期：
+
+- Create 页面显示源游戏和源版本。
+- 提交后生成任务记录 `parentGameId` 和 `remixSourceVersionId`。
+- Worker 发布新游戏后，详情页显示 Remix 来源。
+- 新游戏详情页有 v1 版本历史。
+- 源游戏详情页能看到派生作品列表。
+
+### 7. 内容审核与资源限额
+
+预期：
+
+- prompt 命中轻量敏感词时任务直接失败，不进入 Worker。
+- 超过并发任务数、24 小时任务数、文件数量或上传大小时 Create API 返回错误提示。
+
+### 8. 点赞和收藏
 
 登录后进入任意游戏详情页。
 
@@ -139,7 +169,7 @@ minioadmin
 - 点击“收藏”会增加收藏数。
 - 再次点击会取消收藏。
 
-### 7. GitHub OAuth
+### 9. GitHub OAuth
 
 配置：
 
@@ -159,7 +189,7 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
 - GitHub 登录会提示尚未配置。
 - 邮箱登录不受影响。
 
-### 8. LLM 可选接入
+### 10. LLM 可选接入
 
 配置：
 
@@ -174,9 +204,11 @@ MODEL_NAME=gpt-5.5
 - 有 Key 时 Planner/Coder 优先调用模型。
 - 无 Key 或模型调用失败时自动 fallback。
 - AgentLog 中会记录模型来源或 fallback 行为。
+- 任务历史会显示估算 token 和成本。
 
 ## 已知风险
 
 - 当前没有真实 LLM API 调用，生成器为 fallback。
 - 需要同时启动 Web dev server 和 Worker。
 - MinIO 的本地公开访问策略依赖 `minio-init` 容器初始化。
+- Windows 上 `npx prisma generate` 可能因为 query engine DLL 文件锁失败，关闭占用进程后重跑即可。

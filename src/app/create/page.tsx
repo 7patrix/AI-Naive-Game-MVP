@@ -7,6 +7,7 @@ type CreatePageProps = {
   searchParams: Promise<{
     error?: string;
     job?: string;
+    remixGameId?: string;
   }>;
 };
 
@@ -34,6 +35,21 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     redirect("/login?next=/create");
   }
 
+  const remixSource = params.remixGameId
+    ? await db.game.findFirst({
+        where: {
+          id: params.remixGameId,
+          status: "PUBLISHED"
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          currentVersionNumber: true
+        }
+      })
+    : null;
+
   const jobs = await db.generationJob.findMany({
     where: {
       userId: user.id
@@ -49,13 +65,22 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
           createdAt: "desc"
         }
       },
+      parentGame: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          currentVersionNumber: true
+        }
+      },
       game: {
         select: {
           id: true,
           slug: true,
           title: true,
           manifestUrl: true,
-          bundleUrl: true
+          bundleUrl: true,
+          currentVersionNumber: true
         }
       }
     },
@@ -94,14 +119,26 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
         <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
           当前登录账号：<span className="font-semibold">{user.email}</span>。这里创建的生成任务会绑定到该账号。
         </div>
+        {remixSource ? (
+          <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+            正在 Remix：<span className="font-semibold">{remixSource.title}</span> v
+            {remixSource.currentVersionNumber}。提交后会记录源游戏和源版本。
+          </div>
+        ) : null}
         <form
           action="/api/generation-jobs"
           className="mt-6 space-y-4"
           encType="multipart/form-data"
           method="post"
         >
+          {remixSource ? <input name="remixGameId" type="hidden" value={remixSource.id} /> : null}
           <textarea
             className="min-h-40 w-full rounded-xl border border-slate-300 px-4 py-3"
+            defaultValue={
+              remixSource
+                ? `Remix《${remixSource.title}》：保留核心玩法，但加入新的关卡目标、视觉反馈和节奏变化。源游戏简介：${remixSource.description}`
+                : undefined
+            }
             name="prompt"
             placeholder="描述一个小游戏创意，例如：做一个太空飞船躲避陨石的小游戏。"
             required
@@ -156,11 +193,30 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
                       >
                         {statusLabels[job.status]}
                       </span>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          job.moderationStatus === "REJECTED"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        审核：{job.moderationStatus}
+                      </span>
                       <span className="font-mono text-xs text-slate-500">{job.id}</span>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-slate-700">{job.prompt}</p>
+                    {job.parentGame ? (
+                      <p className="mt-2 text-xs text-violet-700">
+                        Remix 来源：{job.parentGame.title} v{job.parentGame.currentVersionNumber}
+                      </p>
+                    ) : null}
                   </div>
-                  <div className="text-sm font-semibold text-slate-700">{job.progress}%</div>
+                  <div className="text-right text-sm font-semibold text-slate-700">
+                    <p>{job.progress}%</p>
+                    <p className="mt-1 text-xs font-normal text-slate-500">
+                      估算成本：{(job.estimatedCostCents / 100).toFixed(2)} USD
+                    </p>
+                  </div>
                 </div>
 
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
@@ -194,6 +250,7 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
                 {job.game ? (
                   <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-xs text-emerald-900">
                     <p className="font-semibold">发布产物</p>
+                    <p className="mt-2">版本：v{job.game.currentVersionNumber}</p>
                     <p className="mt-2 break-all">Manifest：{job.game.manifestUrl}</p>
                     <p className="mt-1 break-all">Bundle：{job.game.bundleUrl}</p>
                     <a

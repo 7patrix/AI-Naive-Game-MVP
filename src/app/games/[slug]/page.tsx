@@ -32,6 +32,35 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
         where: { userId: user?.id ?? "__anonymous__" },
         select: { id: true }
       },
+      parentGame: {
+        select: {
+          slug: true,
+          title: true,
+          currentVersionNumber: true
+        }
+      },
+      remixes: {
+        where: { status: GameStatus.PUBLISHED },
+        orderBy: { publishedAt: "desc" },
+        take: 4,
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          publishedAt: true
+        }
+      },
+      versions: {
+        orderBy: { versionNumber: "desc" },
+        select: {
+          id: true,
+          versionNumber: true,
+          manifestUrl: true,
+          bundleUrl: true,
+          changeSummary: true,
+          createdAt: true
+        }
+      },
       events: {
         orderBy: { createdAt: "desc" },
         take: 5
@@ -104,6 +133,20 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
             <dd className="font-medium text-slate-900">{game.playCount}</dd>
           </div>
           <div className="flex justify-between gap-4">
+            <dt className="text-slate-500">当前版本</dt>
+            <dd className="font-medium text-slate-900">v{game.currentVersionNumber}</dd>
+          </div>
+          {game.parentGame ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Remix 来源</dt>
+              <dd className="text-right font-medium text-slate-900">
+                <Link className="text-indigo-600" href={`/games/${game.parentGame.slug}`}>
+                  {game.parentGame.title} v{game.parentGame.currentVersionNumber}
+                </Link>
+              </dd>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-4">
             <dt className="text-slate-500">点赞</dt>
             <dd className="font-medium text-slate-900">{game._count.likes}</dd>
           </div>
@@ -146,6 +189,54 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
         >
           开始游玩
         </Link>
+        <Link
+          className="mt-3 inline-flex w-full justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700"
+          href={
+            user
+              ? `/create?remixGameId=${game.id}`
+              : `/login?next=${encodeURIComponent(`/create?remixGameId=${game.id}`)}`
+          }
+        >
+          Remix 派生这个游戏
+        </Link>
+        <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+          <h3 className="text-sm font-semibold text-slate-900">版本历史</h3>
+          {game.versions.length > 0 ? (
+            <ul className="mt-3 space-y-3 text-xs text-slate-600">
+              {game.versions.map((version) => (
+                <li className="rounded-xl bg-white p-3" key={version.id}>
+                  <div className="flex justify-between gap-3">
+                    <span className="font-semibold text-slate-900">v{version.versionNumber}</span>
+                    <span>{version.createdAt.toLocaleDateString("zh-CN")}</span>
+                  </div>
+                  <p className="mt-2">{version.changeSummary}</p>
+                  <p className="mt-2 break-all font-mono text-[11px] text-slate-500">
+                    {version.manifestUrl}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">暂无版本记录。</p>
+          )}
+        </div>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+          <h3 className="text-sm font-semibold text-slate-900">Remix 派生</h3>
+          {game.remixes.length > 0 ? (
+            <ul className="mt-3 space-y-2 text-xs text-slate-600">
+              {game.remixes.map((remix) => (
+                <li className="flex justify-between gap-3" key={remix.id}>
+                  <Link className="text-indigo-600" href={`/games/${remix.slug}`}>
+                    {remix.title}
+                  </Link>
+                  <span>{remix.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">暂无公开 Remix。</p>
+          )}
+        </div>
         <div className="mt-6 rounded-2xl bg-slate-50 p-4">
           <h3 className="text-sm font-semibold text-slate-900">游玩埋点统计</h3>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">

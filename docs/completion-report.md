@@ -26,8 +26,9 @@
 - 支持文字创意输入。
 - 支持多文件上传。
 - 上传文件进入 MinIO。
+- 创建前执行轻量内容审核和资源限额检查。
 - 创建 `GenerationJob`。
-- 展示任务状态、进度、上传文件和 Agent 日志。
+- 展示任务状态、进度、上传文件、审核结果、估算成本和 Agent 日志。
 - 有运行中任务时自动刷新页面。
 - 失败任务支持重试。
 - 任务完成后展示 Manifest 和 Bundle 产物地址。
@@ -39,6 +40,7 @@
 - `CoderAgent`
 - `ReviewerAgent`
 - `PublisherAgent`
+- `CostAgent`
 
 每个阶段都会写入 `AgentLog`。
 
@@ -49,6 +51,7 @@
 - 生成 SVG 封面。
 - 上传到 MinIO。
 - 创建 `PUBLISHED` 状态的 `Game` 记录。
+- 写入 `GameVersion` v1 版本记录。
 
 ### Play
 
@@ -68,6 +71,11 @@
 - GitHub OAuth 可配置接入。
 - Google OAuth 数据模型和扩展方式在文档中说明。
 - OpenAI-compatible LLM 可选接入，失败自动 fallback。
+- Remix 派生：详情页可基于已发布游戏创建 Remix 任务。
+- 版本管理：`GameVersion` 记录 Manifest、Bundle、封面和变更说明。
+- 生成成本统计：记录估算 token 和成本。
+- 轻量内容审核：敏感词命中会阻止任务进入 Worker。
+- 资源限额：限制并发任务、每日任务数、文件数量和上传大小。
 
 ## Mock / fallback 部分
 
@@ -88,10 +96,6 @@
 ## 未完成
 
 - Google OAuth 真实接入。
-- Remix 派生。
-- 版本管理。
-- 生成成本统计。
-- 内容审核。
 - 生产级代码沙箱。
 - 自动化测试覆盖。
 
@@ -102,8 +106,8 @@
 1. 接入真实 LLM，让 Planner/Coder 使用模型生成游戏规格和代码。
 2. 增加 Reviewer 的静态安全扫描和 smoke test。
 3. 引入 Redis + BullMQ 替代数据库轮询。
-4. 增加任务失败重试、取消和重新生成。
-5. 增加游戏版本管理和 Remix。
-6. 增加搜索、标签筛选、点赞收藏。
+4. 增加任务取消、重新生成和版本回滚。
+5. 强化 Remix 差异对比和父子作品图谱。
+6. 增加更严格的内容审核、成本预算和管理员后台。
 7. 增加部署流水线和线上 Demo。
 8. 增加端到端测试和截图验证。

@@ -47,19 +47,50 @@ async function main() {
   ];
 
   for (const game of games) {
-    await prisma.game.upsert({
+    const savedGame = await prisma.game.upsert({
       where: { slug: game.slug },
       update: {
         ...game,
         status: "PUBLISHED",
+        currentVersionNumber: 1,
         publishedAt: new Date()
       },
       create: {
         ...game,
         status: "PUBLISHED",
+        currentVersionNumber: 1,
         publishedAt: new Date(),
         storagePrefix: `seeds/${game.slug}`,
         authorId: user.id
+      }
+    });
+
+    await prisma.gameVersion.upsert({
+      where: {
+        gameId_versionNumber: {
+          gameId: savedGame.id,
+          versionNumber: 1
+        }
+      },
+      update: {
+        title: savedGame.title,
+        description: savedGame.description,
+        manifestUrl: savedGame.manifestUrl ?? "",
+        bundleUrl: savedGame.bundleUrl ?? "",
+        coverUrl: savedGame.coverUrl,
+        storagePrefix: savedGame.storagePrefix ?? `seeds/${savedGame.slug}`,
+        changeSummary: "Seed demo version"
+      },
+      create: {
+        gameId: savedGame.id,
+        versionNumber: 1,
+        title: savedGame.title,
+        description: savedGame.description,
+        manifestUrl: savedGame.manifestUrl ?? "",
+        bundleUrl: savedGame.bundleUrl ?? "",
+        coverUrl: savedGame.coverUrl,
+        storagePrefix: savedGame.storagePrefix ?? `seeds/${savedGame.slug}`,
+        changeSummary: "Seed demo version"
       }
     });
   }

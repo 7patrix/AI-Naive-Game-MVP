@@ -14,7 +14,7 @@ PENDING -> RUNNING -> SUCCEEDED / FAILED
 
 1. 轮询最早的 `PENDING` 任务。
 2. 将任务状态改为 `RUNNING`，进度设为 10。
-3. 执行 Planner、Coder、Reviewer、Publisher。
+3. 执行 Planner、Coder、Reviewer、Publisher、Cost。
 4. 成功后状态改为 `SUCCEEDED`，进度 100。
 5. 失败后状态改为 `FAILED`，记录错误信息。
 
@@ -25,6 +25,7 @@ PENDING -> RUNNING -> SUCCEEDED / FAILED
 职责：
 
 - 读取用户 prompt。
+- 读取 Remix 源游戏和源版本上下文。
 - 生成游戏标题、类型、核心玩法、简介和标签。
 - 形成后续代码生成所需的结构化规格。
 
@@ -75,18 +76,38 @@ PENDING -> RUNNING -> SUCCEEDED / FAILED
 - 生成最终 HTML、Manifest 和封面。
 - 上传产物到 MinIO。
 - 创建 `Game` 记录并标记为 `PUBLISHED`。
+- 创建 `GameVersion` 记录，保存当前版本的远端产物地址。
 
 当前实现：
 
 - 真实上传：
-  - `games/{jobId}/index.html`
-  - `games/{jobId}/manifest.json`
-  - `games/{jobId}/cover.svg`
+  - `games/{jobId}/v1/index.html`
+  - `games/{jobId}/v1/manifest.json`
+  - `games/{jobId}/v1/cover.svg`
 - 写入：
   - `Game.manifestUrl`
   - `Game.bundleUrl`
   - `Game.coverUrl`
   - `Game.createdByJobId`
+  - `Game.parentGameId`
+  - `Game.sourceVersionId`
+  - `GameVersion`
+
+### CostAgent
+
+职责：
+
+- 估算 prompt、规格和生成产物的 token 数。
+- 根据是否使用 LLM 记录本地 fallback 或 OpenAI-compatible 估算成本。
+- 写入 `GenerationJob.modelInputTokens`、`modelOutputTokens` 和 `estimatedCostCents`。
+
+### ModerationAgent
+
+职责：
+
+- 在 Create API 入库时执行轻量内容审核。
+- 命中敏感词时将任务标记为 `FAILED`，不进入 Worker 队列。
+- 通过时写入 `moderationStatus` 和审核报告。
 
 ## 模型接入说明
 

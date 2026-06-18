@@ -22,6 +22,12 @@ type BundlePlan = {
   generator: "llm" | "fallback";
   html?: string;
 };
+type CostEstimate = {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostCents: number;
+  pricing: "openai-compatible-estimate" | "fallback-local";
+};
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -54,6 +60,43 @@ function buildSlug(title: string, jobId: string) {
     .slice(0, 40);
 
   return `${ascii || "generated-game"}-${jobId.slice(-8)}`;
+}
+
+function getRemixContext(job: Job) {
+  if (!job.parentGame) {
+    return "";
+  }
+
+  return `Remix 源游戏：${job.parentGame.title}。源游戏简介：${job.parentGame.description}。源版本：v${job.remixSourceVersion?.versionNumber ?? job.parentGame.currentVersionNumber}。`;
+}
+
+function estimateTokens(text: string) {
+  return Math.ceil(text.length / 4);
+}
+
+function estimateGenerationCost(job: Job, spec: GameSpec, bundlePlan: BundlePlan): CostEstimate {
+  const inputTokens = estimateTokens(
+    [job.prompt, getRemixContext(job), JSON.stringify(job.inputFiles ?? []), JSON.stringify(spec)].join("\n")
+  );
+  const outputTokens = estimateTokens([JSON.stringify(spec), bundlePlan.html ?? ""].join("\n"));
+
+  if (!hasModelConfig() || bundlePlan.generator === "fallback") {
+    return {
+      inputTokens,
+      outputTokens,
+      estimatedCostCents: 0,
+      pricing: "fallback-local"
+    };
+  }
+
+  const estimatedDollars = (inputTokens / 1000) * 0.00015 + (outputTokens / 1000) * 0.0006;
+
+  return {
+    inputTokens,
+    outputTokens,
+    estimatedCostCents: Math.max(1, Math.ceil(estimatedDollars * 100)),
+    pricing: "openai-compatible-estimate"
+  };
 }
 
 function generateGameHtml(spec: GameSpec, job: Job) {
@@ -275,6 +318,10 @@ async function claimNextJob() {
           message: "Worker 已领取任务，开始执行 Agent 流水线。"
         }
       }
+    },
+    include: {
+      parentGame: true,
+      remixSourceVersion: true
     }
   });
 }
@@ -317,7 +364,7 @@ async function runPlannerAgent(job: Job) {
     try {
       spec = await completeJson<GameSpec>(
         "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。",
-        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}`
+        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}`
       );
       source = "llm";
     } catch (error) {
@@ -329,7 +376,8 @@ async function runPlannerAgent(job: Job) {
 
   await addLog(job.id, "PlannerAgent", "spec_created", "已将用户创意整理为游戏规格。", {
     source,
-    spec
+    spec,
+    remixContext: getRemixContext(job) || null
   });
   await updateProgress(job.id, 30);
   return spec;
@@ -347,7 +395,7 @@ async function runCoderAgent(job: Job, spec: GameSpec) {
     try {
       const html = await completeText(
         "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止请求网络资源，使用内联 CSS/JS 和 Canvas。",
-        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}`
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}`
       );
       if (html.includes("<html") && html.includes("</html>")) {
         bundlePlan.html = html;
@@ -387,7 +435,8 @@ async function runReviewerAgent(job: Job, bundlePlan: BundlePlan) {
 }
 
 async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePlan, checks: object) {
-  const storagePrefix = `games/${job.id}`;
+  const versionNumber = 1;
+  const storagePrefix = `games/${job.id}/v${versionNumber}`;
   const html = bundlePlan.html ?? generateGameHtml(spec, job);
   const htmlUpload = await uploadObject({
     key: `${storagePrefix}/index.html`,
@@ -430,19 +479,43 @@ async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePla
       manifestUrl: manifestUpload.url,
       bundleUrl: htmlUpload.url,
       storagePrefix,
+      currentVersionNumber: versionNumber,
       authorId: job.userId,
       createdByJobId: job.id,
+      parentGameId: job.parentGameId,
+      sourceVersionId: job.remixSourceVersionId,
       publishedAt: new Date()
+    }
+  });
+
+  const version = await prisma.gameVersion.create({
+    data: {
+      gameId: game.id,
+      versionNumber,
+      title: spec.title,
+      description: spec.description,
+      manifestUrl: manifestUpload.url,
+      bundleUrl: htmlUpload.url,
+      coverUrl: coverUpload.url,
+      storagePrefix,
+      jobId: job.id,
+      changeSummary: job.parentGame
+        ? `Remixed from ${job.parentGame.title} with prompt: ${job.prompt.slice(0, 120)}`
+        : "Initial generated version"
     }
   });
 
   const publishResult = {
     gameId: game.id,
     gameSlug: game.slug,
+    versionId: version.id,
+    versionNumber: version.versionNumber,
     manifestUrl: manifestUpload.url,
     bundleUrl: htmlUpload.url,
     coverUrl: coverUpload.url,
     storagePrefix,
+    parentGameId: job.parentGameId,
+    remixSourceVersionId: job.remixSourceVersionId,
     spec,
     bundlePlan,
     checks
@@ -468,6 +541,9 @@ async function processJob(job: Job) {
     const checks = await runReviewerAgent(job, bundlePlan);
     await wait(250);
     const publishResult = await runPublisherAgent(job, spec, bundlePlan, checks);
+    const costEstimate = estimateGenerationCost(job, spec, bundlePlan);
+
+    await addLog(job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", costEstimate);
 
     await prisma.generationJob.update({
       where: {
@@ -477,11 +553,15 @@ async function processJob(job: Job) {
         status: GenerationJobStatus.SUCCEEDED,
         progress: 100,
         finishedAt: new Date(),
+        modelInputTokens: costEstimate.inputTokens,
+        modelOutputTokens: costEstimate.outputTokens,
+        estimatedCostCents: costEstimate.estimatedCostCents,
         result: {
           spec,
           bundlePlan,
           checks,
-          publishResult
+          publishResult,
+          costEstimate
         },
         logs: {
           create: {

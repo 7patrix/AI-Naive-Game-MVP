@@ -20,6 +20,12 @@ enum GenerationJobStatus {
   FAILED
 }
 
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum UploadedAssetKind {
   IMAGE
   VIDEO
@@ -35,20 +41,20 @@ enum GameEventType {
 }
 
 model User {
-  id           String          @id @default(cuid())
-  email        String          @unique
-  name         String?
-  passwordHash String
-  avatarUrl    String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  games        Game[]
-  sessions     Session[]
-  uploads      UploadedAsset[]
-  jobs         GenerationJob[]
-  events       GameEvent[]
-  likes        GameLike[]
-  favorites    GameFavorite[]
+  id            String          @id @default(cuid())
+  email         String          @unique
+  name          String?
+  passwordHash  String
+  avatarUrl     String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  games         Game[]
+  sessions      Session[]
+  uploads       UploadedAsset[]
+  jobs          GenerationJob[]
+  events        GameEvent[]
+  likes         GameLike[]
+  favorites     GameFavorite[]
   oauthAccounts OAuthAccount[]
 }
 
@@ -65,29 +71,38 @@ model Session {
 }
 
 model Game {
-  id             String          @id @default(cuid())
-  title          String
-  slug           String          @unique
-  description    String
-  coverUrl       String?
-  tags           String[]
-  status         GameStatus      @default(DRAFT)
-  manifestUrl    String?
-  bundleUrl      String?
-  storagePrefix  String?
-  playCount      Int             @default(0)
-  authorId       String
-  createdByJobId String?         @unique
-  publishedAt    DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdByJob   GenerationJob?  @relation("GeneratedGame", fields: [createdByJobId], references: [id])
-  events         GameEvent[]
-  likes          GameLike[]
-  favorites      GameFavorite[]
+  id                   String          @id @default(cuid())
+  title                String
+  slug                 String          @unique
+  description          String
+  coverUrl             String?
+  tags                 String[]
+  status               GameStatus      @default(DRAFT)
+  manifestUrl          String?
+  bundleUrl            String?
+  storagePrefix        String?
+  playCount            Int             @default(0)
+  currentVersionNumber Int             @default(1)
+  authorId             String
+  createdByJobId       String?         @unique
+  parentGameId         String?
+  sourceVersionId      String?
+  publishedAt          DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  author               User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdByJob         GenerationJob?  @relation("GeneratedGame", fields: [createdByJobId], references: [id])
+  parentGame           Game?           @relation("GameRemixes", fields: [parentGameId], references: [id], onDelete: SetNull)
+  remixes              Game[]          @relation("GameRemixes")
+  sourceVersion        GameVersion?    @relation("VersionRemixes", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  versions             GameVersion[]
+  remixJobs            GenerationJob[] @relation("RemixJobs")
+  events               GameEvent[]
+  likes                GameLike[]
+  favorites            GameFavorite[]
 
   @@index([authorId])
+  @@index([parentGameId])
   @@index([status, publishedAt])
 }
 
@@ -131,25 +146,59 @@ model GameFavorite {
 }
 
 model GenerationJob {
-  id          String              @id @default(cuid())
-  prompt      String
-  status      GenerationJobStatus @default(PENDING)
-  progress    Int                 @default(0)
-  error       String?
-  inputFiles  Json?
-  result      Json?
-  userId      String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  startedAt   DateTime?
-  finishedAt  DateTime?
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  logs        AgentLog[]
-  uploads     UploadedAsset[]
-  game        Game?               @relation("GeneratedGame")
+  id                   String              @id @default(cuid())
+  prompt               String
+  status               GenerationJobStatus @default(PENDING)
+  progress             Int                 @default(0)
+  error                String?
+  inputFiles           Json?
+  result               Json?
+  moderationStatus     ModerationStatus    @default(PENDING)
+  moderationReport     Json?
+  estimatedCostCents   Int                 @default(0)
+  modelInputTokens     Int                 @default(0)
+  modelOutputTokens    Int                 @default(0)
+  userId               String
+  parentGameId         String?
+  remixSourceVersionId String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentGame           Game?               @relation("RemixJobs", fields: [parentGameId], references: [id], onDelete: SetNull)
+  remixSourceVersion   GameVersion?        @relation("RemixSourceJobs", fields: [remixSourceVersionId], references: [id], onDelete: SetNull)
+  logs                 AgentLog[]
+  uploads              UploadedAsset[]
+  game                 Game?               @relation("GeneratedGame")
+  versions             GameVersion[]       @relation("JobVersions")
 
   @@index([userId])
+  @@index([parentGameId])
   @@index([status, createdAt])
+}
+
+model GameVersion {
+  id            String          @id @default(cuid())
+  gameId        String
+  versionNumber Int
+  title         String
+  description   String
+  manifestUrl   String
+  bundleUrl     String
+  coverUrl      String?
+  storagePrefix String
+  jobId         String?
+  changeSummary String
+  createdAt     DateTime        @default(now())
+  game          Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  job           GenerationJob?  @relation("JobVersions", fields: [jobId], references: [id], onDelete: SetNull)
+  remixedGames  Game[]          @relation("VersionRemixes")
+  remixJobs     GenerationJob[] @relation("RemixSourceJobs")
+
+  @@unique([gameId, versionNumber])
+  @@index([jobId])
+  @@index([createdAt])
 }
 
 model AgentLog {
