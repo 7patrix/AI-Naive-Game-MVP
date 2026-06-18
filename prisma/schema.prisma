@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GameStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum GenerationJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum UploadedAssetKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  OTHER
+}
+
+enum GameEventType {
+  PLAY_START
+  PLAY_LOADED
+  PLAY_ERROR
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  name         String?
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  games        Game[]
+  sessions     Session[]
+  uploads      UploadedAsset[]
+  jobs         GenerationJob[]
+  events       GameEvent[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Game {
+  id             String          @id @default(cuid())
+  title          String
+  slug           String          @unique
+  description    String
+  coverUrl       String?
+  tags           String[]
+  status         GameStatus      @default(DRAFT)
+  manifestUrl    String?
+  bundleUrl      String?
+  storagePrefix  String?
+  playCount      Int             @default(0)
+  authorId       String
+  createdByJobId String?         @unique
+  publishedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdByJob   GenerationJob?  @relation("GeneratedGame", fields: [createdByJobId], references: [id])
+  events         GameEvent[]
+
+  @@index([authorId])
+  @@index([status, publishedAt])
+}
+
+model GenerationJob {
+  id          String              @id @default(cuid())
+  prompt      String
+  status      GenerationJobStatus @default(PENDING)
+  progress    Int                 @default(0)
+  error       String?
+  inputFiles  Json?
+  result      Json?
+  userId      String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs        AgentLog[]
+  uploads     UploadedAsset[]
+  game        Game?               @relation("GeneratedGame")
+
+  @@index([userId])
+  @@index([status, createdAt])
+}
+
+model AgentLog {
+  id        String        @id @default(cuid())
+  jobId     String
+  agentName String
+  step      String
+  message   String
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  job       GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+}
+
+model UploadedAsset {
+  id          String            @id @default(cuid())
+  ownerId     String
+  jobId       String?
+  kind        UploadedAssetKind @default(OTHER)
+  filename    String
+  contentType String
+  sizeBytes   Int
+  storageKey  String
+  publicUrl   String
+  createdAt   DateTime          @default(now())
+  owner       User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  job         GenerationJob?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
+  @@index([jobId])
+}
+
+model GameEvent {
+  id        String        @id @default(cuid())
+  gameId    String
+  userId    String?
+  type      GameEventType
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  game      Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([gameId, createdAt])
+  @@index([userId])
+}
