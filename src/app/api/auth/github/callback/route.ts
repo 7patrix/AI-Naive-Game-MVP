@@ -4,8 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSession, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { outboundFetch } from "@/lib/outbound-fetch";
 
 const OAUTH_STATE_COOKIE = "github_oauth_state";
+const OAUTH_NEXT_COOKIE = "github_oauth_next";
 
 type GitHubUser = {
   id: number;
@@ -28,7 +30,7 @@ function redirectWithError(request: NextRequest, error: string) {
 }
 
 async function fetchGitHubJson<T>(url: string, token: string) {
-  const response = await fetch(url, {
+  const response = await outboundFetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -49,7 +51,9 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(OAUTH_STATE_COOKIE)?.value;
+  const nextPath = cookieStore.get(OAUTH_NEXT_COOKIE)?.value ?? "/create";
   cookieStore.delete(OAUTH_STATE_COOKIE);
+  cookieStore.delete(OAUTH_NEXT_COOKIE);
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return redirectWithError(request, "GitHub OAuth state 校验失败。");
@@ -59,7 +63,7 @@ export async function GET(request: NextRequest) {
     return redirectWithError(request, "GitHub OAuth 尚未配置。");
   }
 
-  const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
+  const tokenResponse = await outboundFetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -112,7 +116,7 @@ export async function GET(request: NextRequest) {
 
   if (existingAccount) {
     await createSession(existingAccount.userId);
-    return NextResponse.redirect(new URL("/create", request.url), { status: 303 });
+    return NextResponse.redirect(new URL(nextPath, request.url), { status: 303 });
   }
 
   const existingUser = await db.user.findUnique({
@@ -140,5 +144,5 @@ export async function GET(request: NextRequest) {
 
   await createSession(user.id);
 
-  return NextResponse.redirect(new URL("/create", request.url), { status: 303 });
+  return NextResponse.redirect(new URL(nextPath, request.url), { status: 303 });
 }

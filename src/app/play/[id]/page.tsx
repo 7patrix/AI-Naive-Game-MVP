@@ -4,6 +4,7 @@ import { GameEventType, GameStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { remoteGameManifestSchema } from "@/lib/game-manifest";
+import { PlayFrame } from "./PlayFrame";
 
 type PlayPageProps = {
   params: Promise<{
@@ -68,19 +69,9 @@ export default async function PlayPage({ params }: PlayPageProps) {
         userId: user?.id,
         type: GameEventType.PLAY_START,
         metadata: {
-          manifestUrl: game.manifestUrl
-        }
-      }
-    }),
-    db.gameEvent.create({
-      data: {
-        gameId: game.id,
-        userId: user?.id,
-        type: manifest ? GameEventType.PLAY_LOADED : GameEventType.PLAY_ERROR,
-        metadata: {
           manifestUrl: game.manifestUrl,
-          entryUrl: manifest?.entryUrl,
-          error: manifestError
+          manifestLoaded: Boolean(manifest),
+          manifestError
         }
       }
     })
@@ -125,19 +116,13 @@ export default async function PlayPage({ params }: PlayPageProps) {
       </section>
 
       {manifest ? (
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 shadow-sm">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 text-sm text-slate-200">
-            <span>{manifest.title}</span>
-            <span>权限：{manifest.permissions.join("、")}</span>
-          </div>
-          <iframe
-            className="h-[640px] w-full bg-slate-950"
-            referrerPolicy="no-referrer"
-            sandbox="allow-scripts allow-pointer-lock"
-            src={manifest.entryUrl}
-            title={manifest.title}
-          />
-        </section>
+        <PlayFrame
+          entryUrl={manifest.entryUrl}
+          gameId={game.id}
+          manifestUrl={game.manifestUrl}
+          permissions={manifest.permissions}
+          title={manifest.title}
+        />
       ) : (
         <section className="rounded-3xl border border-red-200 bg-red-50 p-8 text-red-700">
           <h2 className="text-lg font-semibold">游戏加载失败</h2>

@@ -9,6 +9,7 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
+  const nextParam = params.next ? `?next=${encodeURIComponent(params.next)}` : "";
 
   return (
     <div className="mx-auto max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -56,12 +57,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         或
         <div className="h-px flex-1 bg-slate-200" />
       </div>
-      <a
-        className="flex w-full justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-800"
-        href="/api/auth/github/start"
-      >
-        使用 GitHub 登录
-      </a>
+      <div className="space-y-3">
+        <a
+          className="flex w-full justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-800"
+          href={`/api/auth/google/start${nextParam}`}
+        >
+          使用 Google 登录
+        </a>
+        <a
+          className="flex w-full justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-800"
+          href={`/api/auth/github/start${nextParam}`}
+        >
+          使用 GitHub 登录
+        </a>
+      </div>
     </div>
   );
 }

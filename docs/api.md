@@ -54,7 +54,7 @@
 行为：
 
 - 检查 `GITHUB_CLIENT_ID`。
-- 创建 OAuth state cookie。
+- 创建 OAuth state cookie 和登录后跳转 cookie。
 - 重定向到 GitHub 授权页。
 
 ### GET `/api/auth/github/callback`
@@ -67,6 +67,29 @@
 - 交换 access token。
 - 获取 GitHub 用户和邮箱。
 - 根据 `OAuthAccount` 查找或绑定本地用户。
+- 创建 session。
+
+### GET `/api/auth/google/start`
+
+用途：发起 Google OAuth 登录。
+
+行为：
+
+- 检查 `GOOGLE_CLIENT_ID`。
+- 创建 OAuth state cookie 和登录后跳转 cookie。
+- 重定向到 Google 授权页，请求 `openid email profile` scope。
+
+### GET `/api/auth/google/callback`
+
+用途：处理 Google OAuth 回调。
+
+行为：
+
+- 校验 state。
+- 交换 access token。
+- 读取 OpenID Connect userinfo。
+- 要求 Google 邮箱已验证。
+- 根据 `OAuthAccount(provider="google")` 查找或绑定本地用户。
 - 创建 session。
 
 ## 生成任务接口

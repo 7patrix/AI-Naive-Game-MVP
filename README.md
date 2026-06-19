@@ -105,12 +105,12 @@ MinIO 默认账号：
 - 游戏点赞和收藏
 - 生成任务自动刷新和失败重试
 - 详情页展示游玩埋点统计
-- 可配置 GitHub OAuth 登录
+- 可配置 Google / GitHub OAuth 登录
 - OpenAI-compatible LLM 可选接入，失败自动 fallback
 
 ## 当前取舍
 
-当前 MVP 默认使用本地 fallback generator 生成 Canvas HTML 小游戏。配置 `OPENAI_API_KEY` 后，`PlannerAgent` 和 `CoderAgent` 会优先调用 OpenAI-compatible Chat Completions API；如果没有 Key 或调用失败，会自动回退到本地生成器。
+当前 MVP 默认使用本地 fallback generator 生成 Canvas HTML 小游戏。fallback 会根据 prompt 关键词选择躲避、收集、点击反应、追逐等不同玩法模板，避免所有生成结果都是固定假数据。配置 `OPENAI_API_KEY` 后，`PlannerAgent` 和 `CoderAgent` 会优先调用 OpenAI-compatible Chat Completions API；如果没有 Key 或调用失败，会自动回退到本地生成器。
 
 系统已经预留真实模型接入点：
 
@@ -118,13 +118,19 @@ MinIO 默认账号：
 OPENAI_API_KEY=""
 OPENAI_BASE_URL="https://api.openai.com/v1"
 MODEL_NAME="gpt-5.5"
+MODEL_WIRE_API="chat"
+OUTBOUND_PROXY_URL="http://127.0.0.1:7897"
 ```
 
-后续可将 `PlannerAgent` 和 `CoderAgent` 替换为真实模型调用，保留任务、日志、对象存储、Manifest 和 Play 运行协议。
+`OPENAI_BASE_URL` 可替换为任意 OpenAI-compatible 服务地址。飞书提供的 GPT 5.5 接入文档使用 `OPENAI_BASE_URL="http://43.106.115.130:8080/v1"` 和 `MODEL_WIRE_API="responses"`。`OUTBOUND_PROXY_URL` 可选，本地网络需要代理访问模型服务或 GitHub OAuth 时再配置。模型调用成功时 AgentLog 会标记 `source: llm`；失败时会写入 `llm_fallback` 并继续使用本地 generator，保留任务、日志、对象存储、Manifest 和 Play 运行协议。
 
-GitHub OAuth 是可选能力。配置以下变量后，登录页的“使用 GitHub 登录”可以真实跑通：
+Google / GitHub OAuth 是可选能力。两者共用 `OAuthAccount(provider, providerAccountId)` 数据模型；配置对应变量后，登录页的第三方登录可以真实跑通：
 
 ```text
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+GOOGLE_REDIRECT_URI="http://localhost:3000/api/auth/google/callback"
+
 GITHUB_CLIENT_ID=""
 GITHUB_CLIENT_SECRET=""
 GITHUB_REDIRECT_URI="http://localhost:3000/api/auth/github/callback"

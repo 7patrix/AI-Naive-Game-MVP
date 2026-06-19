@@ -12,7 +12,7 @@
 - session token 只在浏览器保存原文，数据库保存 sha256 hash。
 - session cookie 设置为 `httpOnly` 和 `sameSite=lax`。
 - `/create` 是受保护页面，未登录会跳转到 `/login?next=/create`。
-- GitHub OAuth 使用 state cookie 防 CSRF。
+- Google / GitHub OAuth 使用 state cookie 防 CSRF。
 - OAuth 账号使用 `OAuthAccount(provider, providerAccountId)` 绑定到本地用户。
 
 ### 对象存储边界
@@ -40,10 +40,10 @@ Play 页不会把生成代码 import 到主应用中执行，而是：
 4. iframe 使用 sandbox：
 
 ```text
-sandbox="allow-scripts allow-pointer-lock"
+sandbox="allow-scripts allow-same-origin allow-pointer-lock"
 ```
 
-这能隔离生成游戏代码和主站 React 应用。
+这能隔离生成游戏代码和主站 React 应用，同时允许远端对象存储 origin 下的游戏使用自己的 `localStorage` 保存最高分等轻量状态。生成游戏仍不能直接访问主站 cookie 或 React 运行时。
 
 ### Manifest 协议校验
 
@@ -61,7 +61,7 @@ Play 页使用 `remoteGameManifestSchema` 校验远端 JSON，要求：
 - 还没有运行时资源限额。
 - 还没有真实隔离容器或 VM。
 - 当前生成器是本地 fallback，不会生成任意外部模型代码，因此风险较低。
-- GitHub OAuth 需要用户自己配置 OAuth App 和回调地址。
+- Google / GitHub OAuth 需要用户自己配置 OAuth App 和回调地址。
 
 ## 生产级扩展
 
@@ -73,4 +73,4 @@ Play 页使用 `remoteGameManifestSchema` 校验远端 JSON，要求：
 - 隔离执行：在容器、VM、Firecracker 或浏览器沙箱中做 smoke test。
 - 内容审核：对 prompt、上传素材、生成标题和描述做文本/图片审核。
 - 审计日志：保留生成输入、模型输出摘要、安全检查结果和发布记录。
-- Google OAuth：沿用 `OAuthAccount` 模型，新增 provider 为 `google`，回调后按 providerAccountId 或邮箱绑定账号。
+- OAuth 扩展：沿用 `OAuthAccount` 模型，新增 provider 名称和 start/callback 路由，回调后按 providerAccountId 或邮箱绑定账号。

@@ -160,10 +160,11 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
       <section className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-8">
         <h2 className="text-xl font-semibold text-slate-950">Agent 流水线</h2>
         <ol className="mt-5 space-y-4 text-sm text-slate-700">
-          <li>1. Planner Agent：把用户创意整理成游戏规格说明。</li>
-          <li>2. Coder Agent：根据规格生成 Web 游戏文件。</li>
-          <li>3. Reviewer Agent：检查基础安全规则和产物结构。</li>
-          <li>4. Publisher Agent：上传 Manifest 和游戏文件到对象存储。</li>
+          <li>1. AssetAnalyzer Agent：分析上传素材，提取图片尺寸、文本摘要和素材用途。</li>
+          <li>2. Planner Agent：结合创意和素材上下文整理游戏规格说明。</li>
+          <li>3. Coder Agent：根据规格生成 Web 游戏文件。</li>
+          <li>4. Reviewer Agent：检查基础安全规则和产物结构。</li>
+          <li>5. Publisher Agent：上传 Manifest 和游戏文件到对象存储。</li>
         </ol>
       </section>
       </div>

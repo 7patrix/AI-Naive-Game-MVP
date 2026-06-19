@@ -126,6 +126,7 @@ minioadmin
 
 - bucket `ai-arcade` 存在。
 - 能看到 `games/{jobId}/v1/index.html`、`manifest.json` 和 `cover.svg`。
+- 如果 Create 上传了图片素材，Manifest `assets` 中应同时包含 `uploads/{userId}/{jobId}/...` 的素材 URL。
 
 ### 5. Play
 
@@ -134,9 +135,12 @@ minioadmin
 预期：
 
 - Play 页展示 Manifest 地址和 iframe 入口。
+- iframe 区域先展示准备开始 overlay，需要点击“开始游戏”后才挂载远端 iframe。
 - iframe 加载 MinIO 中的远端 HTML 游戏。
+- iframe 加载成功后 overlay 消失。
 - 可以用方向键或 WASD 控制飞船。
-- 数据库中 `playCount` 自增，并写入 `GameEvent`。
+- 数据库中 `playCount` 自增，并写入 `PLAY_START`。
+- iframe 实际加载成功后通过客户端 API 写入 `PLAY_LOADED`；加载超时或错误会写入 `PLAY_ERROR`。
 - 详情页能看到 `PLAY_START`、`PLAY_LOADED`、`PLAY_ERROR` 统计。
 
 ### 6. Remix 与版本
@@ -169,11 +173,15 @@ minioadmin
 - 点击“收藏”会增加收藏数。
 - 再次点击会取消收藏。
 
-### 9. GitHub OAuth
+### 9. Google / GitHub OAuth
 
 配置：
 
 ```text
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
@@ -181,12 +189,14 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
 
 预期：
 
+- 登录页点击“使用 Google 登录”后进入 Google 授权页。
 - 登录页点击“使用 GitHub 登录”后进入 GitHub 授权页。
-- 回调后创建或绑定本地账号，并进入 `/create`。
+- 回调后创建或绑定本地账号，并进入 `/create` 或登录前的 `next` 路径。
+- `OAuthAccount` 中保存 provider 和 providerAccountId，用于下次登录直接绑定同一用户。
 
 未配置时：
 
-- GitHub 登录会提示尚未配置。
+- Google / GitHub 登录会提示尚未配置。
 - 邮箱登录不受影响。
 
 ### 10. LLM 可选接入
@@ -197,6 +207,16 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 MODEL_NAME=gpt-5.5
+MODEL_WIRE_API=chat
+OUTBOUND_PROXY_URL=http://127.0.0.1:7897
+```
+
+飞书 GPT 5.5 API 可使用：
+
+```text
+OPENAI_BASE_URL=http://43.106.115.130:8080/v1
+MODEL_NAME=gpt-5.5
+MODEL_WIRE_API=responses
 ```
 
 预期：
@@ -205,10 +225,11 @@ MODEL_NAME=gpt-5.5
 - 无 Key 或模型调用失败时自动 fallback。
 - AgentLog 中会记录模型来源或 fallback 行为。
 - 任务历史会显示估算 token 和成本。
+- fallback 模式下，不同 prompt 会选择不同玩法模板，例如收集、点击反应、追逐或躲避。
 
 ## 已知风险
 
-- 当前没有真实 LLM API 调用，生成器为 fallback。
+- 未配置模型 Key 时生成器为 fallback；配置 OpenAI-compatible API 后可真实调用模型。
 - 需要同时启动 Web dev server 和 Worker。
 - MinIO 的本地公开访问策略依赖 `minio-init` 容器初始化。
 - Windows 上 `npx prisma generate` 可能因为 query engine DLL 文件锁失败，关闭占用进程后重跑即可。

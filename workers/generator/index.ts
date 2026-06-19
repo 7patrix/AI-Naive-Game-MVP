@@ -1,6 +1,6 @@
 import { GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
 import type { RemoteGameManifest } from "../../src/lib/game-manifest";
-import { completeJson, completeText, hasModelConfig } from "../../src/lib/model-client";
+import { completeJson, completeText, completeVisionText, hasModelConfig } from "../../src/lib/model-client";
 import { uploadObject } from "../../src/lib/storage";
 
 const prisma = new PrismaClient();
@@ -14,6 +14,27 @@ type GameSpec = {
   promptSummary: string;
   description: string;
   tags: string[];
+};
+type InputAsset = {
+  id?: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  publicUrl: string;
+};
+type AssetAnalysis = {
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  publicUrl: string;
+  kind: "image" | "video" | "audio" | "text" | "document" | "other";
+  summary: string;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  textPreview?: string;
+  visionSummary?: string;
 };
 type BundlePlan = {
   entry: string;
@@ -46,6 +67,107 @@ function jsonForScript(value: unknown) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+function getInputAssets(job: Job): InputAsset[] {
+  if (!Array.isArray(job.inputFiles)) {
+    return [];
+  }
+
+  return job.inputFiles.filter((item): item is InputAsset => {
+    if (!item || typeof item !== "object") return false;
+    const asset = item as Partial<InputAsset>;
+    return (
+      typeof asset.filename === "string" &&
+      typeof asset.contentType === "string" &&
+      typeof asset.sizeBytes === "number" &&
+      typeof asset.publicUrl === "string"
+    );
+  });
+}
+
+function getAssetKind(contentType: string): AssetAnalysis["kind"] {
+  if (contentType.startsWith("image/")) return "image";
+  if (contentType.startsWith("video/")) return "video";
+  if (contentType.startsWith("audio/")) return "audio";
+  if (contentType.startsWith("text/")) return "text";
+  if (contentType.includes("json") || contentType.includes("xml")) return "text";
+  if (contentType.includes("pdf") || contentType.includes("document")) return "document";
+  return "other";
+}
+
+function parsePngDimensions(bytes: Uint8Array) {
+  const isPng =
+    bytes.length >= 24 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47;
+
+  if (!isPng) {
+    return null;
+  }
+
+  return {
+    width: (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19],
+    height: (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]
+  };
+}
+
+function parseGifDimensions(bytes: Uint8Array) {
+  const isGif =
+    bytes.length >= 10 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46;
+
+  if (!isGif) {
+    return null;
+  }
+
+  return {
+    width: bytes[6] | (bytes[7] << 8),
+    height: bytes[8] | (bytes[9] << 8)
+  };
+}
+
+function parseJpegDimensions(bytes: Uint8Array) {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return null;
+  }
+
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = bytes[offset + 1];
+    const length = (bytes[offset + 2] << 8) + bytes[offset + 3];
+    const isStartOfFrame = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+
+    if (isStartOfFrame) {
+      return {
+        height: (bytes[offset + 5] << 8) + bytes[offset + 6],
+        width: (bytes[offset + 7] << 8) + bytes[offset + 8]
+      };
+    }
+
+    offset += 2 + length;
+  }
+
+  return null;
+}
+
+function parseImageDimensions(bytes: Uint8Array) {
+  return parsePngDimensions(bytes) ?? parseGifDimensions(bytes) ?? parseJpegDimensions(bytes);
+}
+
+function formatBytes(sizeBytes: number) {
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`;
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function buildTitle(prompt: string) {
   const compact = prompt.replace(/\s+/g, "").slice(0, 18);
   return compact ? `AI 小游戏：${compact}` : "AI 生成小游戏";
@@ -60,6 +182,53 @@ function buildSlug(title: string, jobId: string) {
     .slice(0, 40);
 
   return `${ascii || "generated-game"}-${jobId.slice(-8)}`;
+}
+
+function buildFallbackSpec(prompt: string): GameSpec {
+  const lowerPrompt = prompt.toLowerCase();
+  const summary = prompt.slice(0, 180);
+
+  if (/(收集|采集|金币|宝石|星星|collect|coin|gem|star)/i.test(lowerPrompt)) {
+    return {
+      title: buildTitle(prompt),
+      genre: "Collector",
+      coreLoop: "玩家移动角色收集发光宝石，同时避开红色危险球，尽可能获得高分。",
+      promptSummary: summary,
+      description: `根据创意“${prompt.slice(0, 80)}”生成的收集类 Web 小游戏。`,
+      tags: ["AI生成", "Collector", "Canvas"]
+    };
+  }
+
+  if (/(点击|反应|打地鼠|tap|click|reaction|whack)/i.test(lowerPrompt)) {
+    return {
+      title: buildTitle(prompt),
+      genre: "Reaction",
+      coreLoop: "玩家需要快速点击不断出现的目标，连续命中会获得更高分数。",
+      promptSummary: summary,
+      description: `根据创意“${prompt.slice(0, 80)}”生成的反应点击类 Web 小游戏。`,
+      tags: ["AI生成", "Reaction", "Canvas"]
+    };
+  }
+
+  if (/(追逐|迷宫|逃离|怪物|chase|maze|escape|monster)/i.test(lowerPrompt)) {
+    return {
+      title: buildTitle(prompt),
+      genre: "Chase",
+      coreLoop: "玩家在追逐压力下移动角色，保持距离并尽量存活更久。",
+      promptSummary: summary,
+      description: `根据创意“${prompt.slice(0, 80)}”生成的追逐生存类 Web 小游戏。`,
+      tags: ["AI生成", "Chase", "Canvas"]
+    };
+  }
+
+  return {
+    title: buildTitle(prompt),
+    genre: "Arcade",
+    coreLoop: "玩家通过键盘或鼠标操作角色，躲避障碍并获得分数。",
+    promptSummary: summary,
+    description: `根据创意“${prompt.slice(0, 80)}”生成的轻量级 Web 小游戏。`,
+    tags: ["AI生成", "Arcade", "Canvas"]
+  };
 }
 
 function getRemixContext(job: Job) {
@@ -99,10 +268,14 @@ function estimateGenerationCost(job: Job, spec: GameSpec, bundlePlan: BundlePlan
   };
 }
 
-function generateGameHtml(spec: GameSpec, job: Job) {
+function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis[] = []) {
   const title = escapeHtml(spec.title);
   const prompt = jsonForScript(spec.promptSummary);
   const coreLoop = escapeHtml(spec.coreLoop);
+  const fallbackMode = jsonForScript(spec.genre.toLowerCase());
+  const primaryImageAsset = assetAnalyses.find((asset) => asset.kind === "image");
+  const primaryImageUrl = jsonForScript(primaryImageAsset?.publicUrl ?? null);
+  const primaryImageName = jsonForScript(primaryImageAsset?.filename ?? null);
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -147,28 +320,65 @@ function generateGameHtml(spec: GameSpec, job: Job) {
         font-size: 13px;
         line-height: 1.6;
       }
+      .restart {
+        position: fixed;
+        left: 50%;
+        top: calc(50% + 64px);
+        z-index: 3;
+        transform: translateX(-50%);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 14px;
+        background: #4f46e5;
+        color: white;
+        cursor: pointer;
+        font: 700 16px system-ui;
+        padding: 12px 22px;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.35);
+      }
+      .restart[hidden] {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <canvas id="game"></canvas>
+    <canvas id="game" tabindex="0"></canvas>
     <div class="hud">
       <h1>${title}</h1>
       <p>${coreLoop}</p>
       <p>方向键 / WASD 移动，躲避陨石，存活越久分数越高。</p>
+      ${primaryImageAsset ? `<p>玩家角色使用上传素材：${escapeHtml(primaryImageAsset.filename)}</p>` : ""}
     </div>
+    <button class="restart" id="restart" hidden>重新开始</button>
     <script>
       const promptSummary = ${prompt};
+      const gameMode = ${fallbackMode};
+      const uploadedPlayerImageUrl = ${primaryImageUrl};
+      const uploadedPlayerImageName = ${primaryImageName};
       const canvas = document.getElementById("game");
+      const restartButton = document.getElementById("restart");
       const ctx = canvas.getContext("2d");
       const keys = new Set();
       const player = { x: 120, y: 120, r: 15, speed: 5 };
-      const meteors = Array.from({ length: 10 }, (_, index) => ({
-        x: 260 + index * 90,
-        y: 80 + (index % 5) * 90,
-        r: 14 + (index % 4) * 5,
-        vx: -2.2 - Math.random() * 2.5,
-        vy: -1.4 + Math.random() * 2.8
-      }));
+      const uploadedPlayerImage = new Image();
+      let uploadedPlayerImageReady = false;
+      if (uploadedPlayerImageUrl) {
+        uploadedPlayerImage.onload = () => {
+          uploadedPlayerImageReady = true;
+        };
+        uploadedPlayerImage.src = uploadedPlayerImageUrl;
+      }
+      function createMeteors() {
+        return Array.from({ length: gameMode === "chase" ? 4 : 10 }, (_, index) => ({
+          x: 260 + index * 90,
+          y: 80 + (index % 5) * 90,
+          r: gameMode === "collector" ? 10 + (index % 3) * 4 : 14 + (index % 4) * 5,
+          vx: gameMode === "chase" ? 1.4 + Math.random() * 1.2 : -2.2 - Math.random() * 2.5,
+          vy: gameMode === "chase" ? 1.2 + Math.random() * 1.2 : -1.4 + Math.random() * 2.8,
+          kind: gameMode === "collector" && index % 3 !== 0 ? "gem" : "hazard"
+        }));
+      }
+      let meteors = createMeteors();
+      const target = { x: 420, y: 220, r: 32, ttl: 1600 };
       let score = 0;
       let alive = true;
       let last = performance.now();
@@ -183,20 +393,47 @@ function generateGameHtml(spec: GameSpec, job: Job) {
         return Math.max(min, Math.min(max, value));
       }
 
+      function resetGame() {
+        keys.clear();
+        player.x = 120;
+        player.y = 120;
+        meteors = createMeteors();
+        score = 0;
+        alive = true;
+        last = performance.now();
+        target.x = 120 + Math.random() * Math.max(160, window.innerWidth - 240);
+        target.y = 120 + Math.random() * Math.max(120, window.innerHeight - 240);
+        target.ttl = 1600;
+        restartButton.hidden = true;
+        canvas.focus();
+      }
+
+      function moveTarget(width, height) {
+        target.x = 80 + Math.random() * Math.max(120, width - 160);
+        target.y = 80 + Math.random() * Math.max(120, height - 160);
+        target.ttl = 1300 + Math.random() * 900;
+      }
+
       function step(now) {
         const dt = Math.min(32, now - last);
         last = now;
         const width = window.innerWidth;
         const height = window.innerHeight;
 
-        if (alive) {
+        if (alive && gameMode !== "reaction") {
           if (keys.has("ArrowLeft") || keys.has("a")) player.x -= player.speed;
           if (keys.has("ArrowRight") || keys.has("d")) player.x += player.speed;
           if (keys.has("ArrowUp") || keys.has("w")) player.y -= player.speed;
           if (keys.has("ArrowDown") || keys.has("s")) player.y += player.speed;
           player.x = clamp(player.x, player.r, width - player.r);
           player.y = clamp(player.y, player.r, height - player.r);
-          score += dt * 0.015;
+          score += gameMode === "collector" ? dt * 0.004 : dt * 0.015;
+        }
+
+        if (alive && gameMode === "reaction") {
+          target.ttl -= dt;
+          score += dt * 0.004;
+          if (target.ttl <= 0) alive = false;
         }
 
         ctx.clearRect(0, 0, width, height);
@@ -213,33 +450,80 @@ function generateGameHtml(spec: GameSpec, job: Job) {
 
         for (const meteor of meteors) {
           if (alive) {
-            meteor.x += meteor.vx;
-            meteor.y += meteor.vy;
+            if (gameMode === "chase") {
+              const angle = Math.atan2(player.y - meteor.y, player.x - meteor.x);
+              meteor.x += Math.cos(angle) * meteor.vx;
+              meteor.y += Math.sin(angle) * meteor.vy;
+            } else if (gameMode !== "collector" || meteor.kind === "hazard") {
+              meteor.x += meteor.vx;
+              meteor.y += meteor.vy;
+            }
             if (meteor.x < -40) meteor.x = width + 40;
+            if (meteor.x > width + 40) meteor.x = -40;
             if (meteor.y < 40 || meteor.y > height - 40) meteor.vy *= -1;
             const dx = meteor.x - player.x;
             const dy = meteor.y - player.y;
-            if (Math.hypot(dx, dy) < meteor.r + player.r) alive = false;
+            if (Math.hypot(dx, dy) < meteor.r + player.r) {
+              if (gameMode === "collector" && meteor.kind === "gem") {
+                score += 25;
+                meteor.x = 80 + Math.random() * Math.max(120, width - 160);
+                meteor.y = 80 + Math.random() * Math.max(120, height - 160);
+              } else {
+                alive = false;
+              }
+            }
           }
 
           ctx.beginPath();
-          ctx.fillStyle = "#fb923c";
+          ctx.fillStyle = gameMode === "collector" && meteor.kind === "gem" ? "#facc15" : "#fb923c";
           ctx.arc(meteor.x, meteor.y, meteor.r, 0, Math.PI * 2);
           ctx.fill();
           ctx.strokeStyle = "rgba(254, 215, 170, 0.8)";
           ctx.stroke();
         }
 
+        if (alive && gameMode === "reaction") {
+          ctx.beginPath();
+          ctx.fillStyle = "#22c55e";
+          ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(187, 247, 208, 0.95)";
+          ctx.lineWidth = 4;
+          ctx.stroke();
+          ctx.fillStyle = "#e2e8f0";
+          ctx.font = "bold 18px system-ui";
+          ctx.fillText("Time: " + Math.ceil(target.ttl / 100) / 10, 24, height - 66);
+        }
+
         ctx.save();
         ctx.translate(player.x, player.y);
-        ctx.fillStyle = alive ? "#38bdf8" : "#ef4444";
-        ctx.beginPath();
-        ctx.moveTo(0, -player.r - 8);
-        ctx.lineTo(player.r + 8, player.r + 6);
-        ctx.lineTo(0, player.r);
-        ctx.lineTo(-player.r - 8, player.r + 6);
-        ctx.closePath();
-        ctx.fill();
+        if (uploadedPlayerImageReady) {
+          const size = player.r * 3.6;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(uploadedPlayerImage, -size / 2, -size / 2, size, size);
+          ctx.restore();
+          ctx.strokeStyle = alive ? "#7dd3fc" : "#ef4444";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = "rgba(125, 211, 252, 0.18)";
+          ctx.beginPath();
+          ctx.arc(0, 0, size / 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = alive ? "#38bdf8" : "#ef4444";
+          ctx.beginPath();
+          ctx.moveTo(0, -player.r - 8);
+          ctx.lineTo(player.r + 8, player.r + 6);
+          ctx.lineTo(0, player.r);
+          ctx.lineTo(-player.r - 8, player.r + 6);
+          ctx.closePath();
+          ctx.fill();
+        }
         ctx.restore();
 
         ctx.fillStyle = "#e2e8f0";
@@ -253,16 +537,44 @@ function generateGameHtml(spec: GameSpec, job: Job) {
           ctx.font = "bold 36px system-ui";
           ctx.fillText("游戏结束", width / 2, height / 2 - 20);
           ctx.font = "18px system-ui";
-          ctx.fillText("刷新页面重新开始。创意来源：" + promptSummary, width / 2, height / 2 + 22);
+          ctx.fillText("点击重新开始，或按 R 键再玩一次。创意来源：" + promptSummary, width / 2, height / 2 + 22);
           ctx.textAlign = "left";
+          restartButton.hidden = false;
         }
 
         requestAnimationFrame(step);
       }
 
       window.addEventListener("resize", resize);
-      window.addEventListener("keydown", (event) => keys.add(event.key));
+      window.addEventListener("keydown", (event) => {
+        if (!alive && event.key.toLowerCase() === "r") {
+          resetGame();
+          return;
+        }
+        keys.add(event.key);
+      });
       window.addEventListener("keyup", (event) => keys.delete(event.key));
+      window.addEventListener("pointerdown", (event) => {
+        if (!alive || gameMode !== "reaction") return;
+        const dx = event.clientX - target.x;
+        const dy = event.clientY - target.y;
+        if (Math.hypot(dx, dy) <= target.r + 8) {
+          score += 50;
+          moveTarget(window.innerWidth, window.innerHeight);
+        }
+      });
+      window.addEventListener("message", (event) => {
+        if (!event.data || event.data.type !== "AI_ARCADE_KEY") return;
+        const key = event.data.key;
+        if (typeof key !== "string") return;
+        if (!alive && event.data.phase === "keydown" && key.toLowerCase() === "r") {
+          resetGame();
+          return;
+        }
+        if (event.data.phase === "keydown") keys.add(key);
+        if (event.data.phase === "keyup") keys.delete(key);
+      });
+      restartButton.addEventListener("click", resetGame);
       resize();
       requestAnimationFrame(step);
     </script>
@@ -349,22 +661,163 @@ async function updateProgress(jobId: string, progress: number) {
   });
 }
 
-async function runPlannerAgent(job: Job) {
-  let source: "llm" | "fallback" = "fallback";
-  let spec: GameSpec = {
-    title: buildTitle(job.prompt),
-    genre: "Arcade",
-    coreLoop: "玩家通过键盘或鼠标操作角色，躲避障碍并获得分数。",
-    promptSummary: job.prompt.slice(0, 180),
-    description: `根据创意“${job.prompt.slice(0, 80)}”生成的轻量级 Web 小游戏。`,
-    tags: ["AI生成", "Arcade", "Canvas"]
+async function analyzeAsset(asset: InputAsset): Promise<AssetAnalysis> {
+  const kind = getAssetKind(asset.contentType);
+  const base = {
+    filename: asset.filename,
+    contentType: asset.contentType,
+    sizeBytes: asset.sizeBytes,
+    publicUrl: asset.publicUrl,
+    kind
   };
+
+  if (kind === "image") {
+    try {
+      const response = await fetch(asset.publicUrl, { cache: "no-store" });
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const dimensions = parseImageDimensions(bytes);
+      const dimensionText = dimensions ? `，尺寸约 ${dimensions.width}x${dimensions.height}` : "";
+      let visionSummary: string | undefined;
+
+      if (hasModelConfig()) {
+        try {
+          const base64 = Buffer.from(bytes).toString("base64");
+          visionSummary = await completeVisionText(
+            "请用中文分析这张用户上传的游戏参考图片。输出 2-4 句，包含画面主体、风格、主色调、可用于游戏的角色/场景/道具建议。不要输出 Markdown。",
+            {
+              dataUrl: `data:${asset.contentType};base64,${base64}`
+            }
+          );
+        } catch (error) {
+          visionSummary = `视觉模型分析失败：${error instanceof Error ? error.message : "unknown"}`;
+        }
+      }
+
+      return {
+        ...base,
+        dimensions: dimensions ?? undefined,
+        visionSummary,
+        summary: visionSummary
+          ? `用户上传了一张图片素材《${asset.filename}》，类型 ${asset.contentType}，大小 ${formatBytes(asset.sizeBytes)}${dimensionText}。视觉分析：${visionSummary}`
+          : `用户上传了一张图片素材《${asset.filename}》，类型 ${asset.contentType}，大小 ${formatBytes(asset.sizeBytes)}${dimensionText}。可作为角色、场景、UI 风格或参考图使用。`
+      };
+    } catch (error) {
+      return {
+        ...base,
+        summary: `用户上传了一张图片素材《${asset.filename}》，但自动读取尺寸失败。仍可通过文件名、类型和用户 prompt 判断其参考用途。`
+      };
+    }
+  }
+
+  if (kind === "text") {
+    try {
+      const response = await fetch(asset.publicUrl, { cache: "no-store" });
+      const text = (await response.text()).slice(0, 2000);
+
+      return {
+        ...base,
+        textPreview: text,
+        summary: `用户上传了文本素材《${asset.filename}》，已提取前 ${text.length} 个字符作为参考内容。`
+      };
+    } catch {
+      return {
+        ...base,
+        summary: `用户上传了文本素材《${asset.filename}》，但自动读取文本失败。`
+      };
+    }
+  }
+
+  if (kind === "video") {
+    return {
+      ...base,
+      summary: `用户上传了视频素材《${asset.filename}》，类型 ${asset.contentType}，大小 ${formatBytes(asset.sizeBytes)}。当前 MVP 记录素材 URL 和用途提示，可扩展为抽帧或视频理解 Agent。`
+    };
+  }
+
+  if (kind === "audio") {
+    return {
+      ...base,
+      summary: `用户上传了音频素材《${asset.filename}》，类型 ${asset.contentType}，大小 ${formatBytes(asset.sizeBytes)}。可作为音效或背景音乐参考。`
+    };
+  }
+
+  return {
+    ...base,
+    summary: `用户上传了素材文件《${asset.filename}》，类型 ${asset.contentType}，大小 ${formatBytes(asset.sizeBytes)}。`
+  };
+}
+
+async function runAssetAnalyzerAgent(job: Job) {
+  const assets = getInputAssets(job);
+
+  if (assets.length === 0) {
+    await addLog(job.id, "AssetAnalyzerAgent", "assets_skipped", "本次任务没有上传素材，跳过素材分析。");
+    return [];
+  }
+
+  const analyses = await Promise.all(assets.map(analyzeAsset));
+  await addLog(job.id, "AssetAnalyzerAgent", "assets_analyzed", `已分析 ${analyses.length} 个上传素材。`, {
+    analyses
+  });
+  await updateProgress(job.id, 22);
+  return analyses;
+}
+
+function buildAssetContext(analyses: AssetAnalysis[]) {
+  if (analyses.length === 0) {
+    return "本次任务没有上传素材。";
+  }
+
+  return analyses
+    .map((asset, index) => {
+      const dimensions = asset.dimensions ? ` 尺寸：${asset.dimensions.width}x${asset.dimensions.height}。` : "";
+      const vision = asset.visionSummary ? ` 视觉摘要：${asset.visionSummary}` : "";
+      const textPreview = asset.textPreview ? ` 文本摘录：${asset.textPreview.slice(0, 600)}` : "";
+      return `${index + 1}. ${asset.summary}${dimensions}${vision} URL：${asset.publicUrl}.${textPreview}`;
+    })
+    .join("\n");
+}
+
+function validateGeneratedHtml(html: string, assetAnalyses: AssetAnalysis[]) {
+  const lowerHtml = html.toLowerCase();
+  const forbiddenFileUpload =
+    /<input[^>]+type=["']?file/i.test(html) ||
+    lowerHtml.includes("filereader") ||
+    lowerHtml.includes("createobjecturl");
+  const imageAssets = assetAnalyses.filter((asset) => asset.kind === "image");
+  const missingUploadedImage =
+    imageAssets.length > 0 && !imageAssets.some((asset) => html.includes(asset.publicUrl));
+
+  if (forbiddenFileUpload) {
+    return {
+      ok: false,
+      reason: "生成代码包含游戏内文件上传控件，应使用 Create 阶段已上传到 MinIO 的素材 URL。"
+    };
+  }
+
+  if (missingUploadedImage) {
+    return {
+      ok: false,
+      reason: "生成代码没有引用本次上传图片的 MinIO publicUrl，无法证明上传素材进入游戏运行时。"
+    };
+  }
+
+  return {
+    ok: true,
+    reason: "生成代码通过上传素材使用检查。"
+  };
+}
+
+async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[]) {
+  let source: "llm" | "fallback" = "fallback";
+  let spec: GameSpec = buildFallbackSpec(job.prompt);
+  const assetContext = buildAssetContext(assetAnalyses);
 
   if (hasModelConfig()) {
     try {
       spec = await completeJson<GameSpec>(
         "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。",
-        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}`
+        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、图标或 UI 参考。`
       );
       source = "llm";
     } catch (error) {
@@ -377,29 +830,40 @@ async function runPlannerAgent(job: Job) {
   await addLog(job.id, "PlannerAgent", "spec_created", "已将用户创意整理为游戏规格。", {
     source,
     spec,
-    remixContext: getRemixContext(job) || null
+    remixContext: getRemixContext(job) || null,
+    assetContext
   });
   await updateProgress(job.id, 30);
   return spec;
 }
 
-async function runCoderAgent(job: Job, spec: GameSpec) {
+async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnalysis[]) {
   const bundlePlan: BundlePlan = {
     entry: "index.html",
     runtime: "iframe sandbox",
     files: ["index.html", "manifest.json"],
     generator: "fallback"
   };
+  const assetContext = buildAssetContext(assetAnalyses);
 
   if (hasModelConfig()) {
     try {
       const html = await completeText(
-        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止请求网络资源，使用内联 CSS/JS 和 Canvas。",
-        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}`
+        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。",
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。`
       );
       if (html.includes("<html") && html.includes("</html>")) {
-        bundlePlan.html = html;
-        bundlePlan.generator = "llm";
+        const validation = validateGeneratedHtml(html, assetAnalyses);
+
+        if (validation.ok) {
+          bundlePlan.html = html;
+          bundlePlan.generator = "llm";
+        } else {
+          await addLog(job.id, "CoderAgent", "llm_asset_guardrail", validation.reason, {
+            validation,
+            assetUrls: assetAnalyses.map((asset) => asset.publicUrl)
+          });
+        }
       }
     } catch (error) {
       await addLog(job.id, "CoderAgent", "llm_fallback", "模型生成代码失败，已回退到本地 HTML 生成器。", {
@@ -419,11 +883,13 @@ async function runCoderAgent(job: Job, spec: GameSpec) {
   return bundlePlan;
 }
 
-async function runReviewerAgent(job: Job, bundlePlan: BundlePlan) {
+async function runReviewerAgent(job: Job, bundlePlan: BundlePlan, assetAnalyses: AssetAnalysis[]) {
+  const allowedAssetUrls = assetAnalyses.map((asset) => asset.publicUrl);
   const checks = {
     externalScripts: "blocked",
     sandboxRequired: true,
-    maxBundleFiles: 20
+    maxBundleFiles: 20,
+    allowedAssetUrls
   };
 
   await addLog(job.id, "ReviewerAgent", "safety_checked", "已完成基础安全规则检查。", {
@@ -434,10 +900,17 @@ async function runReviewerAgent(job: Job, bundlePlan: BundlePlan) {
   return checks;
 }
 
-async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePlan, checks: object) {
+async function runPublisherAgent(
+  job: Job,
+  spec: GameSpec,
+  bundlePlan: BundlePlan,
+  checks: object,
+  assetAnalyses: AssetAnalysis[]
+) {
   const versionNumber = 1;
   const storagePrefix = `games/${job.id}/v${versionNumber}`;
-  const html = bundlePlan.html ?? generateGameHtml(spec, job);
+  const runtimeAssetUrls = assetAnalyses.map((asset) => asset.publicUrl);
+  const html = bundlePlan.html ?? generateGameHtml(spec, job, assetAnalyses);
   const htmlUpload = await uploadObject({
     key: `${storagePrefix}/index.html`,
     body: html,
@@ -456,7 +929,7 @@ async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePla
     entry: "index.html",
     entryUrl: htmlUpload.url,
     bundleUrl: htmlUpload.url,
-    assets: [coverUpload.url],
+    assets: [coverUpload.url, ...runtimeAssetUrls],
     permissions: ["keyboard", "pointer"],
     createdByJobId: job.id,
     generatedAt: new Date().toISOString()
@@ -514,6 +987,7 @@ async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePla
     bundleUrl: htmlUpload.url,
     coverUrl: coverUpload.url,
     storagePrefix,
+    runtimeAssetUrls,
     parentGameId: job.parentGameId,
     remixSourceVersionId: job.remixSourceVersionId,
     spec,
@@ -534,13 +1008,15 @@ async function runPublisherAgent(job: Job, spec: GameSpec, bundlePlan: BundlePla
 
 async function processJob(job: Job) {
   try {
-    const spec = await runPlannerAgent(job);
+    const assetAnalyses = await runAssetAnalyzerAgent(job);
     await wait(250);
-    const bundlePlan = await runCoderAgent(job, spec);
+    const spec = await runPlannerAgent(job, assetAnalyses);
     await wait(250);
-    const checks = await runReviewerAgent(job, bundlePlan);
+    const bundlePlan = await runCoderAgent(job, spec, assetAnalyses);
     await wait(250);
-    const publishResult = await runPublisherAgent(job, spec, bundlePlan, checks);
+    const checks = await runReviewerAgent(job, bundlePlan, assetAnalyses);
+    await wait(250);
+    const publishResult = await runPublisherAgent(job, spec, bundlePlan, checks, assetAnalyses);
     const costEstimate = estimateGenerationCost(job, spec, bundlePlan);
 
     await addLog(job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", costEstimate);

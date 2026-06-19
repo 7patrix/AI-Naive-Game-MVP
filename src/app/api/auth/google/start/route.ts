@@ -3,8 +3,8 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 
-const OAUTH_STATE_COOKIE = "github_oauth_state";
-const OAUTH_NEXT_COOKIE = "github_oauth_next";
+const OAUTH_STATE_COOKIE = "google_oauth_state";
+const OAUTH_NEXT_COOKIE = "google_oauth_next";
 
 function getSafeNextPath(request: NextRequest) {
   const next = request.nextUrl.searchParams.get("next");
@@ -16,9 +16,9 @@ function getSafeNextPath(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!env.GITHUB_CLIENT_ID) {
+  if (!env.GOOGLE_CLIENT_ID) {
     const url = new URL("/login", request.url);
-    url.searchParams.set("error", "GitHub OAuth 尚未配置，请先使用邮箱登录。");
+    url.searchParams.set("error", "Google OAuth 尚未配置，请先使用邮箱登录。");
     return NextResponse.redirect(url);
   }
 
@@ -39,11 +39,13 @@ export async function GET(request: NextRequest) {
     path: "/"
   });
 
-  const url = new URL("https://github.com/login/oauth/authorize");
-  url.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
-  url.searchParams.set("redirect_uri", env.GITHUB_REDIRECT_URI);
-  url.searchParams.set("scope", "read:user user:email");
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+  url.searchParams.set("redirect_uri", env.GOOGLE_REDIRECT_URI);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
+  url.searchParams.set("prompt", "select_account");
 
   return NextResponse.redirect(url);
 }
