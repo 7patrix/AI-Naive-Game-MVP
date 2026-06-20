@@ -57,7 +57,8 @@ http://localhost:3000
 
 预期：
 
-- 能看到 3 个 seed 游戏。
+- 能看到 3 个基础 seed 游戏，以及 1 个 Create 生成固化样例游戏。
+- 这些 seed 游戏的 `index.html`、`manifest.json`、`cover.svg` 已由 `npm run db:seed` 上传到 MinIO，可直接进入 Play。
 - 能看到通过 Create 生成的新游戏。
 - 游戏卡片包含封面、标题、作者、简介、标签、发布时间、游玩次数。
 - 可以使用搜索框、标签筛选和排序。

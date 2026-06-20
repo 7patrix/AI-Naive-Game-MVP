@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "title": "森林精灵守护战",
+  "entry": "index.html",
+  "entryUrl": "__ENTRY_URL__",
+  "bundleUrl": "__BUNDLE_URL__",
+  "assets": [
+    "__COVER_URL__",
+    "__PLAYER_IMAGE_URL__"
+  ],
+  "permissions": [
+    "keyboard",
+    "pointer"
+  ],
+  "createdByJobId": "seed-generated-forest-spirit-guardian",
+  "generatedAt": "2026-06-20T16:27:02.505Z"
+}

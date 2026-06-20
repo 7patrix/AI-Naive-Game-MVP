@@ -38,6 +38,8 @@ npm run db:migrate
 npm run db:seed
 ```
 
+`db:seed` 会创建测试账号、3 个基础 seed 示例游戏，以及 1 个由 Create 流程生成后固化下来的 AI 游戏样例。seed 脚本会把这些示例游戏的 `index.html`、`manifest.json`、`cover.svg` 和示例图片素材上传到 MinIO，因此 clone 仓库后完成 seed 即可直接在首页看到可 Play 的示例游戏。
+
 启动 Web：
 
 ```bash

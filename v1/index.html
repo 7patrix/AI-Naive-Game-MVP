@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>森林精灵守护战</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      background: radial-gradient(circle at 50% 35%, #94e7a2 0%, #347c4a 45%, #16351f 100%);
+      color: #fff;
+    }
+
+    #gameWrap {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(120, 255, 196, .22), transparent 28%),
+        radial-gradient(circle at 80% 15%, rgba(91, 194, 255, .18), transparent 30%),
+        radial-gradient(circle at 50% 85%, rgba(255, 229, 134, .12), transparent 36%),
+        linear-gradient(180deg, #2f8a51 0%, #1f623b 46%, #112717 100%);
+    }
+
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      cursor: crosshair;
+    }
+
+    .panel {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(88vw, 520px);
+      transform: translate(-50%, -50%);
+      padding: 30px 26px;
+      text-align: center;
+      border: 2px solid rgba(178, 255, 216, .55);
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(16, 68, 39, .88), rgba(10, 34, 22, .92));
+      box-shadow:
+        0 0 34px rgba(70, 238, 198, .36),
+        inset 0 0 28px rgba(116, 255, 197, .12);
+      backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 6vw, 48px);
+      color: #eaffc8;
+      text-shadow: 0 0 14px rgba(118, 255, 223, .9), 0 4px 0 rgba(0,0,0,.2);
+      letter-spacing: 2px;
+    }
+
+    .subtitle {
+      margin: 0 auto 20px;
+      max-width: 430px;
+      line-height: 1.75;
+      color: #d8ffe8;
+      font-size: 15px;
+    }
+
+    .tips {
+      margin: 16px auto 22px;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: rgba(111, 219, 137, .14);
+      color: #eafff1;
+      line-height: 1.65;
+      font-size: 14px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 13px 30px;
+      color: #103719;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(180deg, #e9ff9e, #6df0cb);
+      box-shadow: 0 8px 0 #26835c, 0 0 24px rgba(116, 255, 220, .5);
+      cursor: pointer;
+      transition: transform .08s ease, box-shadow .08s ease;
+    }
+
+    button:active {
+      transform: translateY(5px);
+      box-shadow: 0 3px 0 #26835c, 0 0 18px rgba(116, 255, 220, .45);
+    }
+
+    #hud {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      pointer-events: none;
+      text-shadow: 0 2px 5px rgba(0,0,0,.5);
+    }
+
+    .hudBox {
+      padding: 9px 13px;
+      border: 1px solid rgba(202, 255, 225, .38);
+      border-radius: 16px;
+      background: rgba(8, 45, 24, .56);
+      box-shadow: inset 0 0 16px rgba(107, 255, 202, .12);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    #lifeBox {
+      width: min(42vw, 280px);
+    }
+
+    #lifeBarOuter {
+      width: 100%;
+      height: 15px;
+      margin-top: 5px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.35);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.28);
+    }
+
+    #lifeBar {
+      width: 100%;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ff5e6f, #ffe075, #64ffb4);
+      box-shadow: 0 0 12px rgba(105, 255, 184, .8);
+      transition: width .12s linear;
+    }
+
+    #gameOver {
+      display: none;
+    }
+
+    #finalScore {
+      margin: 10px 0 18px;
+      font-size: 28px;
+      font-weight: 900;
+      color: #9fffe9;
+      text-shadow: 0 0 14px rgba(95, 236, 255, .65);
+    }
+
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #dfffe7;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      margin-right: 5px;
+      vertical-align: -2px;
+      border-radius: 50%;
+    }
+
+    .red { background: radial-gradient(circle, #ff726f, #8c0018 70%); box-shadow: 0 0 10px #ff3b55; }
+    .blue { background: radial-gradient(circle, #e9ffff, #28cfff 60%, #2483ff); box-shadow: 0 0 10px #60f6ff; }
+
+    @media (max-width: 560px) {
+      #hud {
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        gap: 6px;
+        font-size: 13px;
+      }
+
+      .hudBox {
+        padding: 8px 9px;
+        border-radius: 13px;
+      }
+
+      #lifeBox {
+        width: 38vw;
+      }
+
+      .panel {
+        padding: 24px 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="gameWrap">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud">
+      <div class="hudBox">分数：<span id="scoreText">0</span></div>
+      <div class="hudBox" id="lifeBox">
+        生命：<span id="lifeText">100</span>
+        <div id="lifeBarOuter"><div id="lifeBar"></div></div>
+      </div>
+      <div class="hudBox">时间：<span id="timeText">45</span>s</div>
+    </div>
+
+    <div class="panel" id="startPanel">
+      <h1>森林精灵守护战</h1>
+      <p class="subtitle">守护中央的叶精灵！红色暗影球会侵蚀生命，蓝色魔法光点能恢复生命并获得分数。</p>
+      <div class="tips">
+        点击 <span class="dot red"></span>红色暗影球：消除威胁 +10分<br />
+        点击 <span class="dot blue"></span>蓝色魔法光点：治愈精灵 +20分
+      </div>
+      <button id="startBtn">开始守护</button>
+    </div>
+
+    <div class="panel" id="gameOver">
+      <h1>守护结束</h1>
+      <p class="subtitle" id="endMessage">森林的魔法仍在闪耀。</p>
+      <div id="finalScore">最终分数：0</div>
+      <button id="restartBtn">重新开始</button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      const hud = document.getElementById("hud");
+      const startPanel = document.getElementById("startPanel");
+      const gameOverPanel = document.getElementById("gameOver");
+      const startBtn = document.getElementById("startBtn");
+      const restartBtn = document.getElementById("restartBtn");
+      const scoreText = document.getElementById("scoreText");
+      const lifeText = document.getElementById("lifeText");
+      const lifeBar = document.getElementById("lifeBar");
+      const timeText = document.getElementById("timeText");
+      const finalScore = document.getElementById("finalScore");
+      const endMessage = document.getElementById("endMessage");
+
+      const sprite = new Image();
+      sprite.src = "__PLAYER_IMAGE_URL__";
+
+      let w = 0;
+      let h = 0;
+      let dpr = 1;
+      let state = "ready";
+      let score = 0;
+      let life = 100;
+      let timeLeft = 45;
+      let lastTime = 0;
+      let spawnTimer = 0;
+      let blueTimer = 0;
+      let entities = [];
+      let bursts = [];
+      let leaves = [];
+      let motes = [];
+      let guardian = { x: 0, y: 0, r: 78 };
+      let shake = 0;
+      let startTimestamp = 0;
+
+      function resize() {
+        dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        w = window.innerWidth;
+        h = window.innerHeight;
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        canvas.style.width = w + "px";
+        canvas.style.height = h + "px";
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        guardian.x = w / 2;
+        guardian.y = h / 2 + Math.min(30, h * 0.04);
+        guardian.r = Math.max(58, Math.min(95, Math.min(w, h) * 0.125));
+        seedAmbient();
+      }
+
+      function seedAmbient() {
+        leaves = Array.from({ length: Math.max(18, Math.floor(w * h / 42000)) }, () => ({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          s: 8 + Math.random() * 18,
+          a: Math.random() * Math.PI * 2,
+          vx: -10 + Math.random() * 20,
+          vy: 8 + Math.random() * 20,
+          hue: 80 + Math.random() * 45
+        }));
+        motes = Array.from({ length: Math.max(34, Math.floor(w * h / 24000)) }, () => ({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: 1 + Math.random() * 2.8,
+          p: Math.random() * Math.PI * 2,
+          sp: 0.5 + Math.random() * 1.4
+        }));
+      }
+
+      function resetGame() {
+        score = 0;
+        life = 100;
+        timeLeft = 45;
+        entities = [];
+        bursts = [];
+        spawnTimer = 0;
+        blueTimer = 0;
+        shake = 0;
+        startTimestamp = performance.now();
+        lastTime = startTimestamp;
+        updateHud();
+      }
+
+      function startGame() {
+        resetGame();
+        state = "playing";
+        startPanel.style.display = "none";
+        gameOverPanel.style.display = "none";
+        hud.style.display = "flex";
+        requestAnimationFrame(loop);
+      }
+
+      function endGame() {
+        state = "over";
+        hud.style.display = "none";
+        finalScore.textContent = "最终分数：" + score;
+        endMessage.textContent = life <= 0 ? "精灵的护盾被暗影冲破了，再试一次吧！" : "倒计时结束，森林感谢你的守护！";
+        gameOverPanel.style.display = "block";
+      }
+
+      function rand(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function spawnEntity(type) {
+        const side = Math.floor(Math.random() * 4);
+        let x, y;
+        const margin = 45;
+        if (side === 0) { x = rand(0, w); y = -margin; }
+        if (side === 1) { x = w + margin; y = rand(0, h); }
+        if (side === 2) { x = rand(0, w); y = h + margin; }
+        if (side === 3) { x = -margin; y = rand(0, h); }
+
+        const angle = Math.atan2(guardian.y - y, guardian.x - x) + rand(-0.55, 0.55);
+        const speed = type === "shadow" ? rand(22, 42) : rand(18, 34);
+        entities.push({
+          type,
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          r: type === "shadow" ? rand(18, 28) : rand(14, 22),
+          age: 0,
+          near: 0,
+          pulse: Math.random() * Math.PI * 2
+        });
+      }
+
+      function addBurst(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = rand(45, 170);
+          bursts.push({
+            x, y,
+            vx: Math.cos(a) * sp,
+            vy: Math.sin(a) * sp,
+            r: rand(2, 5),
+            life: rand(0.35, 0.75),
+            max: 0.75,
+            color
+          });
+        }
+      }
+
+      function update(dt, now) {
+        if (state === "playing") {
+          timeLeft = Math.max(0, 45 - (now - startTimestamp) / 1000);
+          spawnTimer -= dt;
+          blueTimer -= dt;
+
+          const pressure = 1 + (45 - timeLeft) / 45 * 0.75;
+          if (spawnTimer <= 0) {
+            spawnEntity("shadow");
+            spawnTimer = rand(0.85, 1.35) / pressure;
+          }
+          if (blueTimer <= 0) {
+            spawnEntity("light");
+            blueTimer = rand(1.35, 2.2);
+          }
+
+          for (let i = entities.length - 1; i >= 0; i--) {
+            const e = entities[i];
+            e.age += dt;
+            e.pulse += dt * 5;
+            e.x += e.vx * dt;
+            e.y += e.vy * dt;
+
+            const dx = e.x - guardian.x;
+            const dy = e.y - guardian.y;
+            const dist = Math.hypot(dx, dy);
+            const dangerRange = guardian.r + e.r + 24;
+
+            if (e.type === "shadow" && dist < dangerRange) {
+              e.near += dt;
+              life -= dt * (8 + e.near * 8);
+              shake = Math.min(8, shake + dt * 16);
+              if (Math.random() < dt * 8) addBurst(e.x, e.y, "rgba(255,70,90,.8)", 1);
+            } else {
+              e.near = Math.max(0, e.near - dt * 0.7);
+            }
+
+            if (e.age > 18 || e.x < -120 || e.x > w + 120 || e.y < -120 || e.y > h + 120) {
+              entities.splice(i, 1);
+            }
+          }
+
+          if (life <= 0 || timeLeft <= 0) {
+            life = Math.max(0, life);
+            updateHud();
+            endGame();
+          } else {
+            updateHud();
+          }
+        }
+
+        for (const leaf of leaves) {
+          leaf.x += leaf.vx * dt + Math.sin(now / 1000 + leaf.a) * 9 * dt;
+          leaf.y += leaf.vy * dt;
+          leaf.a += dt * 1.2;
+          if (leaf.y > h + 40) { leaf.y = -40; leaf.x = Math.random() * w; }
+          if (leaf.x < -50) leaf.x = w + 50;
+          if (leaf.x > w + 50) leaf.x = -50;
+        }
+
+        for (const mote of motes) {
+          mote.p += dt * mote.sp;
+          mote.y -= dt * (4 + mote.r * 2);
+          mote.x += Math.sin(mote.p) * dt * 14;
+          if (mote.y < -10) { mote.y = h + 10; mote.x = Math.random() * w; }
+        }
+
+        for (let i = bursts.length - 1; i >= 0; i--) {
+          const p = bursts[i];
+          p.life -= dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= 0.97;
+          p.vy *= 0.97;
+          if (p.life <= 0) bursts.splice(i, 1);
+        }
+
+        shake = Math.max(0, shake - dt * 18);
+      }
+
+      function updateHud() {
+        scoreText.textContent = score;
+        lifeText.textContent = Math.ceil(life);
+        lifeBar.style.width = Math.max(0, Math.min(100, life)) + "%";
+        timeText.textContent = Math.ceil(timeLeft);
+      }
+
+      function drawBackground(now) {
+        const g = ctx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, "#69b96f");
+        g.addColorStop(0.48, "#2e824d");
+        g.addColorStop(1, "#112b19");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        for (let i = 0; i < 9; i++) {
+          const x = (i / 8) * w + Math.sin(now / 1800 + i) * 20;
+          const grd = ctx.createRadialGradient(x, h * 0.08, 0, x, h * 0.22, h * 0.55);
+          grd.addColorStop(0, "rgba(216,255,196,.55)");
+          grd.addColorStop(1, "rgba(216,255,196,0)");
+          ctx.fillStyle = grd;
+          ctx.beginPath();
+          ctx.ellipse(x, h * 0.18, w * 0.11, h * 0.55, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        ctx.save();
+        for (const leaf of leaves) {
+          ctx.translate(leaf.x, leaf.y);
+          ctx.rotate(leaf.a);
+          ctx.fillStyle = `hsla(${leaf.hue}, 70%, 60%, .42)`;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, leaf.s * .45, leaf.s, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(239,255,207,.25)";
+          ctx.beginPath();
+          ctx.moveTo(0, -leaf.s * .8);
+          ctx.lineTo(0, leaf.s * .8);
+          ctx.stroke();
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        ctx.restore();
+
+        for (const mote of motes) {
+          const alpha = 0.35 + Math.sin(mote.p) * 0.22;
+          ctx.fillStyle = `rgba(119, 246, 255, ${alpha})`;
+          ctx.shadowColor = "#80f7ff";
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        const halo = ctx.createRadialGradient(guardian.x, guardian.y, 20, guardian.x, guardian.y, guardian.r * 3.2);
+        halo.addColorStop(0, "rgba(97, 255, 221, .24)");
+        halo.addColorStop(0.5, "rgba(103, 255, 195, .08)");
+        halo.addColorStop(1, "rgba(103, 255, 195, 0)");
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(guardian.x, guardian.y, guardian.r * 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawGuardian(now) {
+        const pulse = 1 + Math.sin(now / 360) * 0.035;
+        const r = guardian.r * pulse;
+
+        ctx.save();
+        ctx.translate(guardian.x, guardian.y);
+
+        ctx.shadowColor = "#52eaff";
+        ctx.shadowBlur = 34;
+        ctx.strokeStyle = "rgba(113, 239, 255, .85)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.shadowColor = "#b9fff4";
+        ctx.shadowBlur = 18;
+        ctx.strokeStyle = "rgba(212, 255, 248, .55)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 9]);
+        ctx.lineDashOffset = -now / 65;
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 22, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.clip();
+
+        if (sprite.complete && sprite.naturalWidth > 0) {
+          ctx.drawImage(sprite, -r, -r, r * 2, r * 2);
+        } else {
+          const fallback = ctx.createRadialGradient(-r * .2, -r * .2, 5, 0, 0, r);
+          fallback.addColorStop(0, "#d9ff94");
+          fallback.addColorStop(0.55, "#74c85b");
+          fallback.addColorStop(1, "#7b552c");
+          ctx.fillStyle = fallback;
+          ctx.fillRect(-r, -r, r * 2, r * 2);
+        }
+
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < 9; i++) {
+          const a = now / 900 + i * Math.PI * 2 / 9;
+          const rr = guardian.r + 36 + Math.sin(now / 400 + i) * 7;
+          ctx.fillStyle = "rgba(124, 242, 255, .55)";
+          ctx.shadowColor = "#7ef7ff";
+          ctx.shadowBlur = 13;
+          ctx.beginPath();
+          ctx.arc(guardian.x + Math.cos(a) * rr, guardian.y + Math.sin(a) * rr, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawShadow(e) {
+        const danger = Math.min(1, e.near / 1.2);
+        const pulse = Math.sin(e.pulse) * 0.12 + danger * 0.18;
+        const r = e.r * (1 + pulse);
+
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.shadowColor = danger > 0 ? "#ff284d" : "#710024";
+        ctx.shadowBlur = 18 + danger * 22;
+
+        const smoke = ctx.createRadialGradient(e.x, e.y, r * .2, e.x, e.y, r * 1.9);
+        smoke.addColorStop(0, "rgba(255, 88, 92, .9)");
+        smoke.addColorStop(0.45, "rgba(120, 0, 35, .82)");
+        smoke.addColorStop(0.75, "rgba(43, 0, 63, .45)");
+        smoke.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = smoke;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r * 1.85, 0, Math.PI * 2);
+        ctx.fill();
+
+        const core = ctx.createRadialGradient(e.x - r * .25, e.y - r * .3, 2, e.x, e.y, r);
+        core.addColorStop(0, "#ffb0a4");
+        core.addColorStop(0.25, "#ff3e4b");
+        core.addColorStop(0.72, "#7d001d");
+        core.addColorStop(1, "#1d001e");
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (danger > 0.05) {
+          ctx.strokeStyle = `rgba(255, 239, 160, ${0.25 + danger * .6})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, r + 7 + Math.sin(e.pulse * 2) * 3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawLight(e) {
+        const pulse = 1 + Math.sin(e.pulse) * 0.18;
+        const r = e.r * pulse;
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.shadowColor = "#72f8ff";
+        ctx.shadowBlur = 26;
+
+        const glow = ctx.createRadialGradient(e.x, e.y, 1, e.x, e.y, r * 2.7);
+        glow.addColorStop(0, "rgba(255,255,255,.95)");
+        glow.addColorStop(0.25, "rgba(120,250,255,.78)");
+        glow.addColorStop(0.62, "rgba(42,142,255,.28)");
+        glow.addColorStop(1, "rgba(42,142,255,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, r * 2.7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#ecffff";
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, Math.max(4, r * .42), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(220,255,255,.75)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const a = e.pulse * .6 + i * Math.PI * 2 / 5;
+          const rr = r * (1.25 + (i % 2) * .25);
+          const px = e.x + Math.cos(a) * rr;
+          const py = e.y + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawEntities() {
+        for (const e of entities) {
+          if (e.type === "shadow") drawShadow(e);
+          else drawLight(e);
+        }
+      }
+
+      function drawBursts() {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (const p of bursts) {
+          const alpha = Math.max(0, p.life / p.max);
+          ctx.fillStyle = p.color.replace(")", `, ${alpha})`).replace("rgba(", "rgba(");
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r * alpha, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(255,255,255,${alpha * .75})`;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.r * 2 * alpha, p.y);
+          ctx.lineTo(p.x + p.r * 2 * alpha, p.y);
+          ctx.moveTo(p.x, p.y - p.r * 2 * alpha);
+          ctx.lineTo(p.x, p.y + p.r * 2 * alpha);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawStartDecor(now) {
+        if (state !== "ready" && state !== "over") return;
+        ctx.save();
+        ctx.globalAlpha = 0.82;
+        drawGuardian(now);
+        ctx.restore();
+      }
+
+      function render(now) {
+        ctx.save();
+        if (shake > 0) {
+          ctx.translate(rand(-shake, shake), rand(-shake, shake));
+        }
+
+        drawBackground(now);
+
+        if (state === "playing") {
+          drawEntities();
+          drawGuardian(now);
+          drawBursts();
+        } else {
+          drawStartDecor(now);
+          drawBursts();
+        }
+
+        ctx.restore();
+      }
+
+      function loop(now) {
+        const dt = Math.min(0.033, (now - lastTime) / 1000 || 0);
+        lastTime = now;
+        update(dt, now);
+        render(now);
+        if (state === "playing" || state === "ready" || state === "over") {
+          requestAnimationFrame(loop);
+        }
+      }
+
+      function pointerPos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        const touch = evt.touches && evt.touches[0] ? evt.touches[0] : evt.changedTouches && evt.changedTouches[0] ? evt.changedTouches[0] : evt;
+        return {
+          x: touch.clientX - rect.left,
+          y: touch.clientY - rect.top
+        };
+      }
+
+      function handlePointer(evt) {
+        if (state !== "playing") return;
+        evt.preventDefault();
+        const p = pointerPos(evt);
+
+        for (let i = entities.length - 1; i >= 0; i--) {
+          const e = entities[i];
+          const dx = p.x - e.x;
+          const dy = p.y - e.y;
+          const hitRadius = e.r + (e.type === "light" ? 18 : 12);
+          if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+            if (e.type === "shadow") {
+              score += 10;
+              addBurst(e.x, e.y, "rgba(255,85,105,.9)", 16);
+            } else {
+              score += 20;
+              life = Math.min(100, life + 10);
+              addBurst(e.x, e.y, "rgba(116,245,255,.95)", 22);
+            }
+            entities.splice(i, 1);
+            updateHud();
+            return;
+          }
+        }
+
+        addBurst(p.x, p.y, "rgba(190,255,210,.45)", 5);
+      }
+
+      startBtn.addEventListener("click", startGame);
+      restartBtn.addEventListener("click", startGame);
+      canvas.addEventListener("mousedown", handlePointer);
+      canvas.addEventListener("touchstart", handlePointer, { passive: false });
+      window.addEventListener("resize", resize);
+
+      resize();
+      requestAnimationFrame((t) => {
+        lastTime = t;
+        requestAnimationFrame(loop);
+      });
+    })();
+  </script>
+</body>
+</html>

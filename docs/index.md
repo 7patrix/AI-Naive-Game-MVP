@@ -45,7 +45,7 @@
 | `workers/generator/index.ts` | Worker / Agent | LangGraph 编排的生成任务 Worker，执行 AssetAnalyzer/Planner/Coder/Reviewer/Publisher/Cost。 |
 | `prisma/schema.prisma` | Data Model | 用户、游戏、版本、素材、任务、日志、举报、审计等数据模型。 |
 | `prisma/migrations/` | Database Migration | 数据库结构迁移 SQL。 |
-| `prisma/seed.ts` | Test Data | 测试账号和 3 个示例游戏。 |
+| `prisma/seed.ts` | Test Data | 测试账号、3 个基础 seed 示例游戏，以及 1 个 Create 生成固化样例；会上传示例产物到 MinIO。 |
 | `docker-compose.yml` | Local Infra | 本地 PostgreSQL、MinIO 和初始化服务。 |
 
 ## 验收要求覆盖情况

@@ -18,7 +18,8 @@
 - 支持搜索标题、简介、作者和标签。
 - 支持标签筛选。
 - 支持按最新发布、最多游玩、最多点赞排序。
-- seed 数据包含 3 个示例游戏。
+- seed 数据包含 3 个基础示例游戏，并额外包含 1 个由 Create 流程生成后固化的 AI 游戏样例。
+- `npm run db:seed` 会把 seed 游戏的 HTML、Manifest、封面和示例图片素材上传到 MinIO，clone 后可直接 Play。
 - Create 流程生成的新游戏会自动出现在首页。
 
 ### Create

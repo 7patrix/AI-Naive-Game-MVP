@@ -12,4 +12,5 @@ prisma/dev.db
 *.mov
 *.mkv
 *.webm
+*.zip
 pixel/
