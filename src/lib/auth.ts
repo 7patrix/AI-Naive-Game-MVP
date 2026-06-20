@@ -89,6 +89,28 @@ export async function getCurrentUser() {
   return session.user;
 }
 
+export function isAdminUser(user: { email: string } | null | undefined) {
+  if (!user) {
+    return false;
+  }
+
+  const adminEmails = env.ADMIN_EMAILS.split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+
+  return adminEmails.includes(user.email.toLowerCase());
+}
+
+export async function requireAdminUser() {
+  const user = await getCurrentUser();
+
+  if (!isAdminUser(user)) {
+    return null;
+  }
+
+  return user;
+}
+
 export async function destroyCurrentSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(env.AUTH_COOKIE_NAME)?.value;

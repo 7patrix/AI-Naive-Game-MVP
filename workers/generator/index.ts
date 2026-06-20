@@ -1,4 +1,5 @@
 import { GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { RemoteGameManifest } from "../../src/lib/game-manifest";
 import { completeJson, completeText, completeVisionText, hasModelConfig } from "../../src/lib/model-client";
 import { uploadObject } from "../../src/lib/storage";
@@ -49,6 +50,7 @@ type CostEstimate = {
   estimatedCostCents: number;
   pricing: "openai-compatible-estimate" | "fallback-local";
 };
+type PublishResult = Awaited<ReturnType<typeof runPublisherAgent>>;
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1006,20 +1008,105 @@ async function runPublisherAgent(
   return publishResult;
 }
 
+const GenerationGraphState = Annotation.Root({
+  job: Annotation<Job>(),
+  assetAnalyses: Annotation<AssetAnalysis[]>({
+    reducer: (_, next) => next,
+    default: () => []
+  }),
+  spec: Annotation<GameSpec | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined
+  }),
+  bundlePlan: Annotation<BundlePlan | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined
+  }),
+  checks: Annotation<object | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined
+  }),
+  publishResult: Annotation<PublishResult | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined
+  }),
+  costEstimate: Annotation<CostEstimate | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined
+  })
+});
+
+function createGenerationGraph() {
+  return new StateGraph(GenerationGraphState)
+    .addNode("asset_analyzer", async (state) => {
+      const assetAnalyses = await runAssetAnalyzerAgent(state.job);
+      await wait(250);
+      return { assetAnalyses };
+    })
+    .addNode("planner", async (state) => {
+      const spec = await runPlannerAgent(state.job, state.assetAnalyses);
+      await wait(250);
+      return { spec };
+    })
+    .addNode("coder", async (state) => {
+      if (!state.spec) {
+        throw new Error("PlannerAgent did not produce a game spec.");
+      }
+
+      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses);
+      await wait(250);
+      return { bundlePlan };
+    })
+    .addNode("reviewer", async (state) => {
+      if (!state.bundlePlan) {
+        throw new Error("CoderAgent did not produce a bundle plan.");
+      }
+
+      const checks = await runReviewerAgent(state.job, state.bundlePlan, state.assetAnalyses);
+      await wait(250);
+      return { checks };
+    })
+    .addNode("publisher", async (state) => {
+      if (!state.spec || !state.bundlePlan || !state.checks) {
+        throw new Error("PublisherAgent is missing upstream generation state.");
+      }
+
+      const publishResult = await runPublisherAgent(
+        state.job,
+        state.spec,
+        state.bundlePlan,
+        state.checks,
+        state.assetAnalyses
+      );
+      return { publishResult };
+    })
+    .addNode("cost", async (state) => {
+      if (!state.spec || !state.bundlePlan) {
+        throw new Error("CostAgent is missing spec or bundle plan.");
+      }
+
+      const costEstimate = estimateGenerationCost(state.job, state.spec, state.bundlePlan);
+      await addLog(state.job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", costEstimate);
+      return { costEstimate };
+    })
+    .addEdge(START, "asset_analyzer")
+    .addEdge("asset_analyzer", "planner")
+    .addEdge("planner", "coder")
+    .addEdge("coder", "reviewer")
+    .addEdge("reviewer", "publisher")
+    .addEdge("publisher", "cost")
+    .addEdge("cost", END)
+    .compile();
+}
+
 async function processJob(job: Job) {
   try {
-    const assetAnalyses = await runAssetAnalyzerAgent(job);
-    await wait(250);
-    const spec = await runPlannerAgent(job, assetAnalyses);
-    await wait(250);
-    const bundlePlan = await runCoderAgent(job, spec, assetAnalyses);
-    await wait(250);
-    const checks = await runReviewerAgent(job, bundlePlan, assetAnalyses);
-    await wait(250);
-    const publishResult = await runPublisherAgent(job, spec, bundlePlan, checks, assetAnalyses);
-    const costEstimate = estimateGenerationCost(job, spec, bundlePlan);
+    const graph = createGenerationGraph();
+    const result = await graph.invoke({ job });
 
-    await addLog(job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", costEstimate);
+    if (!result.spec || !result.bundlePlan || !result.checks || !result.publishResult || !result.costEstimate) {
+      throw new Error("LangGraph generation finished with incomplete state.");
+    }
 
     await prisma.generationJob.update({
       where: {
@@ -1029,15 +1116,16 @@ async function processJob(job: Job) {
         status: GenerationJobStatus.SUCCEEDED,
         progress: 100,
         finishedAt: new Date(),
-        modelInputTokens: costEstimate.inputTokens,
-        modelOutputTokens: costEstimate.outputTokens,
-        estimatedCostCents: costEstimate.estimatedCostCents,
+        modelInputTokens: result.costEstimate.inputTokens,
+        modelOutputTokens: result.costEstimate.outputTokens,
+        estimatedCostCents: result.costEstimate.estimatedCostCents,
         result: {
-          spec,
-          bundlePlan,
-          checks,
-          publishResult,
-          costEstimate
+          orchestration: "langgraph",
+          spec: result.spec,
+          bundlePlan: result.bundlePlan,
+          checks: result.checks,
+          publishResult: result.publishResult,
+          costEstimate: result.costEstimate
         },
         logs: {
           create: {

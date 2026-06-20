@@ -2,21 +2,35 @@
 
 ## 总览
 
-生成系统由 `GenerationJob` 和独立 Worker 驱动。用户在 Create 页面提交创意后，请求不会同步等待游戏生成完成，而是先创建任务，再由 Worker 异步处理。
+生成系统由 `GenerationJob`、独立 Worker 和 LangGraph `StateGraph` 驱动。用户在 Create 页面提交创意后，请求不会同步等待游戏生成完成，而是先创建任务，再由 Worker 异步处理。
 
 ```text
 PENDING -> RUNNING -> SUCCEEDED / FAILED
 ```
 
-每个阶段都会写入 `AgentLog`，便于在 Create 页面展示执行过程。
+Worker 内部把每个 Agent 封装成 LangGraph 节点，并用边定义执行顺序。每个阶段都会写入 `AgentLog`，便于在 Create 页面展示执行过程。
+
+当前图结构：
+
+```text
+START
+  -> asset_analyzer
+  -> planner
+  -> coder
+  -> reviewer
+  -> publisher
+  -> cost
+  -> END
+```
 
 ## Worker 流程
 
 1. 轮询最早的 `PENDING` 任务。
 2. 将任务状态改为 `RUNNING`，进度设为 10。
-3. 执行 AssetAnalyzer、Planner、Coder、Reviewer、Publisher、Cost。
-4. 成功后状态改为 `SUCCEEDED`，进度 100。
-5. 失败后状态改为 `FAILED`，记录错误信息。
+3. 创建并执行 LangGraph `StateGraph`。
+4. 图节点依次执行 AssetAnalyzer、Planner、Coder、Reviewer、Publisher、Cost。
+5. 成功后状态改为 `SUCCEEDED`，进度 100。
+6. 失败后状态改为 `FAILED`，记录错误信息。
 
 ## Agent 角色
 

@@ -40,22 +40,31 @@ enum GameEventType {
   PLAY_ERROR
 }
 
+enum GameReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
 model User {
-  id            String          @id @default(cuid())
-  email         String          @unique
-  name          String?
-  passwordHash  String
-  avatarUrl     String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  games         Game[]
-  sessions      Session[]
-  uploads       UploadedAsset[]
-  jobs          GenerationJob[]
-  events        GameEvent[]
-  likes         GameLike[]
-  favorites     GameFavorite[]
-  oauthAccounts OAuthAccount[]
+  id              String          @id @default(cuid())
+  email           String          @unique
+  name            String?
+  passwordHash    String
+  avatarUrl       String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  games           Game[]
+  sessions        Session[]
+  uploads         UploadedAsset[]
+  jobs            GenerationJob[]
+  events          GameEvent[]
+  likes           GameLike[]
+  favorites       GameFavorite[]
+  oauthAccounts   OAuthAccount[]
+  reports         GameReport[]    @relation("ReporterReports")
+  resolvedReports GameReport[]    @relation("ResolverReports")
+  adminActions    AdminAuditLog[]
 }
 
 model Session {
@@ -100,6 +109,7 @@ model Game {
   events               GameEvent[]
   likes                GameLike[]
   favorites            GameFavorite[]
+  reports              GameReport[]
 
   @@index([authorId])
   @@index([parentGameId])
@@ -244,4 +254,36 @@ model GameEvent {
 
   @@index([gameId, createdAt])
   @@index([userId])
+}
+
+model GameReport {
+  id         String           @id @default(cuid())
+  gameId     String
+  reporterId String?
+  reason     String
+  details    String?
+  status     GameReportStatus @default(OPEN)
+  createdAt  DateTime         @default(now())
+  resolvedAt DateTime?
+  resolverId String?
+  game       Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  reporter   User?            @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: SetNull)
+  resolver   User?            @relation("ResolverReports", fields: [resolverId], references: [id], onDelete: SetNull)
+
+  @@index([gameId, status])
+  @@index([reporterId])
+  @@index([status, createdAt])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  admin     User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
 }

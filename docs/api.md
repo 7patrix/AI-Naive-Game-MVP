@@ -146,6 +146,50 @@
 - 已收藏则取消。
 - 未收藏则创建 `GameFavorite`。
 
+### POST `/api/games/[id]/report`
+
+用途：提交游戏内容举报。
+
+表单字段：
+
+- `reason`：必填，举报原因。
+- `details`：可选，补充说明。
+
+行为：
+
+- 创建 `GameReport`。
+- 重定向回游戏详情页并显示提交结果。
+
+## 管理接口
+
+### POST `/api/admin/games/[id]/status`
+
+用途：管理员下架或恢复发布游戏。
+
+表单字段：
+
+- `status`：`PUBLISHED` 或 `ARCHIVED`。
+
+行为：
+
+- 校验当前用户是否在 `ADMIN_EMAILS` 中。
+- 更新 `Game.status`。
+- 写入 `AdminAuditLog`。
+
+### POST `/api/admin/reports/[id]`
+
+用途：管理员处理举报。
+
+表单字段：
+
+- `status`：`RESOLVED` 或 `DISMISSED`。
+
+行为：
+
+- 校验管理员权限。
+- 更新 `GameReport.status`、`resolverId`、`resolvedAt`。
+- 写入 `AdminAuditLog`。
+
 ## 页面数据流
 
 ### Home `/`

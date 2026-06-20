@@ -17,6 +17,7 @@ AI 游戏工坊是一个 AI Native 互动游戏 Web 平台 MVP，用于演示从
 - 数据库：PostgreSQL + Prisma
 - 对象存储：MinIO，S3 兼容协议
 - 异步任务：Node.js Worker
+- Agent 编排：LangGraph `StateGraph`
 - 游戏运行隔离：iframe sandbox
 
 ## 本地启动
@@ -94,6 +95,7 @@ MinIO 默认账号：
 - Create 生成任务
 - 多文件上传到 MinIO
 - Worker 异步处理任务
+- LangGraph 编排 AssetAnalyzer/Planner/Coder/Reviewer/Publisher/CostAgent
 - Planner/Coder/Reviewer/Publisher Agent 日志
 - 生成 HTML Canvas 小游戏
 - 生成并上传 `manifest.json`
@@ -103,6 +105,7 @@ MinIO 默认账号：
 - `GameEvent` 埋点和 `playCount`
 - Home 搜索、标签筛选、排序
 - 游戏点赞和收藏
+- 游戏举报、管理员后台、下架/恢复发布和审计日志
 - 生成任务自动刷新和失败重试
 - 详情页展示游玩埋点统计
 - 可配置 Google / GitHub OAuth 登录
@@ -138,12 +141,15 @@ GITHUB_REDIRECT_URI="http://localhost:3000/api/auth/github/callback"
 
 ## 文档
 
+- [文档总览与交付索引](docs/index.md)
 - [系统设计](docs/system-design.md)
 - [核心接口](docs/api.md)
 - [Agent 工作流](docs/agent-workflow.md)
 - [安全方案](docs/security.md)
 - [完成度说明](docs/completion-report.md)
 - [测试与验证](docs/verification.md)
+- [线上部署方案](docs/deployment.md)
+- [AI 协作记录](docs/ai-collaboration.md)
 
 ## 常用命令
 

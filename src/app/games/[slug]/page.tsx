@@ -8,12 +8,17 @@ type GameDetailPageProps = {
   params: Promise<{
     slug: string;
   }>;
+  searchParams: Promise<{
+    reported?: string;
+    reportError?: string;
+  }>;
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function GameDetailPage({ params }: GameDetailPageProps) {
+export default async function GameDetailPage({ params, searchParams }: GameDetailPageProps) {
   const { slug } = await params;
+  const query = await searchParams;
   const user = await getCurrentUser();
   const game = await db.game.findUnique({
     where: { slug },
@@ -69,7 +74,8 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
         select: {
           likes: true,
           favorites: true,
-          events: true
+          events: true,
+          reports: true
         }
       }
     }
@@ -90,6 +96,16 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      {query.reported ? (
+        <div className="lg:col-span-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+          举报已提交，平台维护者会在管理后台处理。
+        </div>
+      ) : null}
+      {query.reportError ? (
+        <div className="lg:col-span-2 rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-700">
+          举报提交失败，请填写有效原因后重试。
+        </div>
+      ) : null}
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div
           className="h-72 bg-cover bg-center"
@@ -157,6 +173,10 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
           <div className="flex justify-between gap-4">
             <dt className="text-slate-500">埋点事件</dt>
             <dd className="font-medium text-slate-900">{game._count.events}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-slate-500">举报</dt>
+            <dd className="font-medium text-slate-900">{game._count.reports}</dd>
           </div>
           <div>
             <dt className="text-slate-500">Manifest</dt>
@@ -259,6 +279,26 @@ export default async function GameDetailPage({ params }: GameDetailPageProps) {
               <p className="mt-1 text-slate-500">加载失败</p>
             </div>
           </div>
+        </div>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+          <h3 className="text-sm font-semibold text-slate-900">内容举报</h3>
+          <form action={`/api/games/${game.id}/report`} className="mt-3 space-y-3" method="post">
+            <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs" name="reason" required>
+              <option value="">选择举报原因</option>
+              <option value="不安全或违规内容">不安全或违规内容</option>
+              <option value="无法正常游玩">无法正常游玩</option>
+              <option value="侵权或不当素材">侵权或不当素材</option>
+              <option value="垃圾内容或低质量">垃圾内容或低质量</option>
+            </select>
+            <textarea
+              className="min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-xs"
+              name="details"
+              placeholder="补充说明，可选"
+            />
+            <button className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700" type="submit">
+              提交举报
+            </button>
+          </form>
         </div>
         <div className="mt-4 rounded-2xl bg-slate-50 p-4">
           <h3 className="text-sm font-semibold text-slate-900">最近游玩事件</h3>

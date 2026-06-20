@@ -34,6 +34,7 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   AUTH_COOKIE_NAME: z.string().default("ai_arcade_session"),
   AUTH_SECRET: z.string().min(16).default("dev-secret-change-before-production"),
+  ADMIN_EMAILS: z.string().default("creator@example.com"),
   DATABASE_URL: z.string().min(1),
   S3_ENDPOINT: z.string().url().default("http://localhost:9000"),
   S3_INTERNAL_ENDPOINT: z.string().url().default("http://localhost:9000"),

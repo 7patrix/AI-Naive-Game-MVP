@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "latest",
     "@aws-sdk/s3-request-presigner": "latest",
+    "@langchain/langgraph": "^1.4.4",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "latest",
     "lucide-react": "latest",

@@ -199,7 +199,30 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/auth/github/callback
 - Google / GitHub 登录会提示尚未配置。
 - 邮箱登录不受影响。
 
-### 10. LLM 可选接入
+### 10. 管理后台与举报
+
+配置：
+
+```text
+ADMIN_EMAILS=creator@example.com
+```
+
+打开：
+
+```text
+http://localhost:3000/admin
+```
+
+预期：
+
+- 非管理员访问 `/admin` 会跳转登录。
+- 管理员能看到游戏列表、待处理举报、最近生成任务和审计日志。
+- 游戏详情页可提交举报。
+- 管理后台可将游戏下架为 `ARCHIVED`，下架后首页和详情页不再公开展示。
+- 管理后台可恢复发布游戏，并写入 `AdminAuditLog`。
+- 管理后台可将举报标记为已处理或驳回。
+
+### 11. LLM 可选接入
 
 配置：
 

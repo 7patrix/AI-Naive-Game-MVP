@@ -1,0 +1,313 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { GameReportStatus, GameStatus, GenerationJobStatus } from "@prisma/client";
+import { requireAdminUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+const gameStatusLabels: Record<GameStatus, string> = {
+  DRAFT: "草稿",
+  PUBLISHED: "已发布",
+  ARCHIVED: "已下架"
+};
+
+const jobStatusLabels: Record<GenerationJobStatus, string> = {
+  PENDING: "等待",
+  RUNNING: "运行中",
+  SUCCEEDED: "成功",
+  FAILED: "失败"
+};
+
+const reportStatusLabels: Record<GameReportStatus, string> = {
+  OPEN: "待处理",
+  RESOLVED: "已处理",
+  DISMISSED: "已驳回"
+};
+
+export default async function AdminPage() {
+  const admin = await requireAdminUser();
+
+  if (!admin) {
+    redirect("/login?next=/admin");
+  }
+
+  const [games, reports, jobs, audits, counts] = await Promise.all([
+    db.game.findMany({
+      include: {
+        author: { select: { email: true, name: true } },
+        _count: { select: { reports: true, events: true, likes: true, favorites: true } }
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 30
+    }),
+    db.gameReport.findMany({
+      include: {
+        game: { select: { title: true, slug: true, status: true } },
+        reporter: { select: { email: true, name: true } },
+        resolver: { select: { email: true, name: true } }
+      },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: 20
+    }),
+    db.generationJob.findMany({
+      include: {
+        user: { select: { email: true, name: true } },
+        game: { select: { title: true, slug: true } },
+        logs: { orderBy: { createdAt: "desc" }, take: 3 }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 12
+    }),
+    db.adminAuditLog.findMany({
+      include: { admin: { select: { email: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 12
+    }),
+    Promise.all([
+      db.game.count({ where: { status: GameStatus.PUBLISHED } }),
+      db.game.count({ where: { status: GameStatus.ARCHIVED } }),
+      db.gameReport.count({ where: { status: GameReportStatus.OPEN } }),
+      db.generationJob.count({ where: { status: GenerationJobStatus.FAILED } })
+    ])
+  ]);
+  const [publishedCount, archivedCount, openReportCount, failedJobCount] = counts;
+
+  return (
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-slate-950 p-8 text-white shadow-2xl shadow-slate-200/70">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-red-500/20 blur-3xl" />
+        <div className="absolute bottom-0 left-1/2 h-56 w-56 rounded-full bg-indigo-500/20 blur-3xl" />
+        <p className="relative text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
+          平台维护者
+        </p>
+        <div className="relative mt-3 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <h1 className="text-3xl font-bold">管理后台</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+              用于演示平台维护者如何查看内容、处理举报、下架不当游戏，并追踪生成任务和审计记录。
+            </p>
+          </div>
+          <p className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white backdrop-blur">
+            当前管理员：{admin.email}
+          </p>
+        </div>
+        <div className="relative mt-6 grid gap-4 md:grid-cols-4">
+          <MetricCard label="已发布游戏" value={publishedCount} />
+          <MetricCard label="已下架游戏" value={archivedCount} />
+          <MetricCard label="待处理举报" value={openReportCount} />
+          <MetricCard label="失败任务" value={failedJobCount} />
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-950">内容治理</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          下架会将游戏状态改为 ARCHIVED，首页和详情页不再公开展示，但数据库和对象存储记录会保留。
+        </p>
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="border-b border-slate-200 py-3">游戏</th>
+                <th className="border-b border-slate-200 py-3">作者</th>
+                <th className="border-b border-slate-200 py-3">状态</th>
+                <th className="border-b border-slate-200 py-3">数据</th>
+                <th className="border-b border-slate-200 py-3">更新时间</th>
+                <th className="border-b border-slate-200 py-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {games.map((game) => (
+                <tr key={game.id}>
+                  <td className="border-b border-slate-100 py-4">
+                    <div className="font-semibold text-slate-950">{game.title}</div>
+                    <div className="mt-1 break-all font-mono text-xs text-slate-500">{game.manifestUrl}</div>
+                  </td>
+                  <td className="border-b border-slate-100 py-4">
+                    {game.author.name ?? game.author.email}
+                  </td>
+                  <td className="border-b border-slate-100 py-4">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      {gameStatusLabels[game.status]}
+                    </span>
+                  </td>
+                  <td className="border-b border-slate-100 py-4 text-xs text-slate-600">
+                    {game.playCount} 次游玩 / {game._count.likes} 赞 / {game._count.favorites} 收藏 /
+                    {game._count.reports} 举报
+                  </td>
+                  <td className="border-b border-slate-100 py-4 text-xs text-slate-500">
+                    {game.updatedAt.toLocaleString("zh-CN")}
+                  </td>
+                  <td className="border-b border-slate-100 py-4">
+                    <div className="flex flex-wrap gap-2">
+                      {game.status === GameStatus.PUBLISHED ? (
+                        <AdminStatusForm gameId={game.id} status="ARCHIVED" label="下架" tone="danger" />
+                      ) : (
+                        <AdminStatusForm gameId={game.id} status="PUBLISHED" label="恢复发布" tone="primary" />
+                      )}
+                      <Link className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold" href={`/play/${game.id}`}>
+                        预览
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-[1fr_0.9fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <h2 className="text-2xl font-bold text-slate-950">举报处理</h2>
+          <div className="mt-5 space-y-4">
+            {reports.length > 0 ? (
+              reports.map((report) => (
+                <article className="rounded-2xl border border-slate-200 p-4" key={report.id}>
+                  <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                          {reportStatusLabels[report.status]}
+                        </span>
+                        <Link className="font-semibold text-indigo-700" href={`/games/${report.game.slug}`}>
+                          {report.game.title}
+                        </Link>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-700">原因：{report.reason}</p>
+                      {report.details ? <p className="mt-1 text-xs text-slate-500">{report.details}</p> : null}
+                      <p className="mt-2 text-xs text-slate-500">
+                        举报人：{report.reporter?.name ?? report.reporter?.email ?? "匿名"} / {report.createdAt.toLocaleString("zh-CN")}
+                      </p>
+                      {report.resolver ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          处理人：{report.resolver.name ?? report.resolver.email}
+                        </p>
+                      ) : null}
+                    </div>
+                    {report.status === GameReportStatus.OPEN ? (
+                      <div className="flex gap-2">
+                        <ReportActionForm reportId={report.id} action="RESOLVED" label="标记已处理" />
+                        <ReportActionForm reportId={report.id} action="DISMISSED" label="驳回" />
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">暂无举报。</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <h2 className="text-2xl font-bold text-slate-950">最近生成任务</h2>
+          <div className="mt-5 space-y-4">
+            {jobs.map((job) => (
+              <article className="rounded-2xl border border-slate-200 p-4" key={job.id}>
+                <div className="flex justify-between gap-3">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                    {jobStatusLabels[job.status]}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-500">{job.progress}%</span>
+                </div>
+                <p className="mt-3 line-clamp-2 text-sm text-slate-700">{job.prompt}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  用户：{job.user.name ?? job.user.email} / 成本估算：{(job.estimatedCostCents / 100).toFixed(2)} USD
+                </p>
+                {job.game ? (
+                  <Link className="mt-2 inline-flex text-xs font-semibold text-indigo-700" href={`/games/${job.game.slug}`}>
+                    查看产物：{job.game.title}
+                  </Link>
+                ) : null}
+                <ul className="mt-3 space-y-1 text-xs text-slate-500">
+                  {job.logs.map((log) => (
+                    <li key={log.id}>
+                      {log.agentName} / {log.step}：{log.message}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-950">审计日志</h2>
+        <div className="mt-5 space-y-3 text-sm">
+          {audits.length > 0 ? (
+            audits.map((audit) => (
+              <div className="rounded-2xl bg-slate-50 p-4" key={audit.id}>
+                <div className="flex flex-col justify-between gap-2 md:flex-row">
+                  <span className="font-semibold text-slate-900">{audit.action}</span>
+                  <span className="text-xs text-slate-500">{audit.createdAt.toLocaleString("zh-CN")}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  管理员：{audit.admin.name ?? audit.admin.email} / 目标：{audit.targetId ?? "-"}
+                </p>
+              </div>
+            ))
+          ) : (
+            <p className="rounded-2xl bg-slate-50 p-6 text-sm text-slate-500">暂无审计记录。</p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/10 p-5 text-white backdrop-blur">
+      <p className="text-sm text-slate-300">{label}</p>
+      <p className="mt-2 text-3xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function AdminStatusForm({
+  gameId,
+  status,
+  label,
+  tone
+}: {
+  gameId: string;
+  status: "PUBLISHED" | "ARCHIVED";
+  label: string;
+  tone: "primary" | "danger";
+}) {
+  return (
+    <form action={`/api/admin/games/${gameId}/status`} method="post">
+      <input name="status" type="hidden" value={status} />
+      <button
+        className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+          tone === "danger" ? "bg-red-600 text-white" : "bg-indigo-600 text-white"
+        }`}
+        type="submit"
+      >
+        {label}
+      </button>
+    </form>
+  );
+}
+
+function ReportActionForm({
+  reportId,
+  action,
+  label
+}: {
+  reportId: string;
+  action: "RESOLVED" | "DISMISSED";
+  label: string;
+}) {
+  return (
+    <form action={`/api/admin/reports/${reportId}`} method="post">
+      <input name="status" type="hidden" value={action} />
+      <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold" type="submit">
+        {label}
+      </button>
+    </form>
+  );
+}

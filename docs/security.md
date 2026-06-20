@@ -12,8 +12,10 @@
 - session token 只在浏览器保存原文，数据库保存 sha256 hash。
 - session cookie 设置为 `httpOnly` 和 `sameSite=lax`。
 - `/create` 是受保护页面，未登录会跳转到 `/login?next=/create`。
+- `/admin` 通过 `ADMIN_EMAILS` 限制管理员访问。
 - Google / GitHub OAuth 使用 state cookie 防 CSRF。
 - OAuth 账号使用 `OAuthAccount(provider, providerAccountId)` 绑定到本地用户。
+- 管理员下架/恢复游戏、处理举报时会写入 `AdminAuditLog`。
 
 ### 对象存储边界
 
@@ -56,9 +58,9 @@ Play 页使用 `remoteGameManifestSchema` 校验远端 JSON，要求：
 
 ## 当前限制
 
-- 还没有完整内容审核。
+- 内容审核仍是轻量规则，未接入生产级审核服务。
 - 还没有静态 AST 安全扫描。
-- 还没有运行时资源限额。
+- 运行时资源限额仍是基础规则，未做到浏览器级 CPU/内存隔离。
 - 还没有真实隔离容器或 VM。
 - 当前生成器是本地 fallback，不会生成任意外部模型代码，因此风险较低。
 - Google / GitHub OAuth 需要用户自己配置 OAuth App 和回调地址。

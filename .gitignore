@@ -8,3 +8,8 @@ coverage
 *.log
 *.tsbuildinfo
 prisma/dev.db
+*.mp4
+*.mov
+*.mkv
+*.webm
+pixel/
