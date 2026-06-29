@@ -31,7 +31,7 @@
 - 上传图片可以作为运行时素材直接进入游戏 HTML，例如作为玩家角色贴图，并写入 Manifest `assets`。
 - 创建前执行轻量内容审核和资源限额检查。
 - 创建 `GenerationJob`。
-- 展示任务状态、进度、上传文件、审核结果、估算成本和 Agent 日志。
+- 展示任务状态、进度、上传文件、审核结果、成本统计和 Agent 日志。
 - 有运行中任务时自动刷新页面。
 - 失败任务支持重试。
 - 任务完成后展示 Manifest 和 Bundle 产物地址。
@@ -80,7 +80,7 @@ Worker 使用 LangGraph `StateGraph` 编排这些 Agent 节点，每个阶段都
 - OpenAI-compatible LLM 可选接入，失败自动 fallback。
 - Remix 派生：详情页可基于已发布游戏创建 Remix 任务。
 - 版本管理：`GameVersion` 记录 Manifest、Bundle、封面和变更说明。
-- 生成成本统计：记录估算 token 和成本。
+- 生成成本统计：优先记录模型 API usage token，并按 input/output token 估算成本；缺失 usage 时回退本地估算。
 - 轻量内容审核：敏感词命中会阻止任务进入 Worker。
 - 资源限额：限制并发任务、每日任务数、文件数量和上传大小。
 - Play 加载体验优化：iframe loading overlay、超时提示和客户端真实加载埋点。

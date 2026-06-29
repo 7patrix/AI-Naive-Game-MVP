@@ -103,7 +103,7 @@ http://localhost:3000/create
 
 - 创建 `GenerationJob`。
 - 页面显示任务状态、进度和 Agent 日志。
-- 页面显示审核状态和生成成本估算。
+- 页面显示审核状态和生成成本统计。
 - Worker 处理后状态变为 `SUCCEEDED`。
 - 失败任务会显示重试按钮。
 - 任务完成后能看到 Manifest 和 Bundle 地址。
@@ -248,7 +248,7 @@ MODEL_WIRE_API=responses
 - 有 Key 时 Planner/Coder 优先调用模型。
 - 无 Key 或模型调用失败时自动 fallback。
 - AgentLog 中会记录模型来源或 fallback 行为。
-- 任务历史会显示估算 token 和成本。
+- 任务历史会显示模型 usage token 和成本估算；如果 API 未返回 usage，则使用本地估算。
 - fallback 模式下，不同 prompt 会选择不同玩法模板，例如收集、点击反应、追逐或躲避。
 
 ## 已知风险

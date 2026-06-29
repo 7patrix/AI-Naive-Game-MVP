@@ -1,7 +1,14 @@
 import { GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { RemoteGameManifest } from "../../src/lib/game-manifest";
-import { completeJson, completeText, completeVisionText, hasModelConfig } from "../../src/lib/model-client";
+import {
+  completeJson,
+  completeText,
+  completeVisionText,
+  consumeModelUsage,
+  hasModelConfig,
+  resetModelUsage
+} from "../../src/lib/model-client";
 import { uploadObject } from "../../src/lib/storage";
 
 const prisma = new PrismaClient();
@@ -48,7 +55,9 @@ type CostEstimate = {
   inputTokens: number;
   outputTokens: number;
   estimatedCostCents: number;
-  pricing: "openai-compatible-estimate" | "fallback-local";
+  pricing: "api-usage-estimate" | "openai-compatible-estimate" | "fallback-local";
+  usageSource: "api" | "estimated" | "fallback";
+  modelCalls: number;
 };
 type PublishResult = Awaited<ReturnType<typeof runPublisherAgent>>;
 
@@ -245,28 +254,47 @@ function estimateTokens(text: string) {
   return Math.ceil(text.length / 4);
 }
 
+function calculateEstimatedCostCents(inputTokens: number, outputTokens: number) {
+  const estimatedDollars = (inputTokens / 1000) * 0.00015 + (outputTokens / 1000) * 0.0006;
+  return Math.max(1, Math.ceil(estimatedDollars * 100));
+}
+
 function estimateGenerationCost(job: Job, spec: GameSpec, bundlePlan: BundlePlan): CostEstimate {
-  const inputTokens = estimateTokens(
+  const usage = consumeModelUsage();
+  const estimatedInputTokens = estimateTokens(
     [job.prompt, getRemixContext(job), JSON.stringify(job.inputFiles ?? []), JSON.stringify(spec)].join("\n")
   );
-  const outputTokens = estimateTokens([JSON.stringify(spec), bundlePlan.html ?? ""].join("\n"));
+  const estimatedOutputTokens = estimateTokens([JSON.stringify(spec), bundlePlan.html ?? ""].join("\n"));
 
-  if (!hasModelConfig() || bundlePlan.generator === "fallback") {
+  if (usage) {
     return {
-      inputTokens,
-      outputTokens,
-      estimatedCostCents: 0,
-      pricing: "fallback-local"
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      estimatedCostCents: calculateEstimatedCostCents(usage.inputTokens, usage.outputTokens),
+      pricing: "api-usage-estimate",
+      usageSource: "api",
+      modelCalls: usage.calls
     };
   }
 
-  const estimatedDollars = (inputTokens / 1000) * 0.00015 + (outputTokens / 1000) * 0.0006;
+  if (!hasModelConfig() || bundlePlan.generator === "fallback") {
+    return {
+      inputTokens: estimatedInputTokens,
+      outputTokens: estimatedOutputTokens,
+      estimatedCostCents: 0,
+      pricing: "fallback-local",
+      usageSource: "fallback",
+      modelCalls: 0
+    };
+  }
 
   return {
-    inputTokens,
-    outputTokens,
-    estimatedCostCents: Math.max(1, Math.ceil(estimatedDollars * 100)),
-    pricing: "openai-compatible-estimate"
+    inputTokens: estimatedInputTokens,
+    outputTokens: estimatedOutputTokens,
+    estimatedCostCents: calculateEstimatedCostCents(estimatedInputTokens, estimatedOutputTokens),
+    pricing: "openai-compatible-estimate",
+    usageSource: "estimated",
+    modelCalls: 0
   };
 }
 
@@ -1101,6 +1129,7 @@ function createGenerationGraph() {
 
 async function processJob(job: Job) {
   try {
+    resetModelUsage();
     const graph = createGenerationGraph();
     const result = await graph.invoke({ job });
 

@@ -12,6 +12,11 @@ type ChatCompletionResponse = {
       content?: string;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 type ResponsesApiResponse = {
@@ -22,13 +27,55 @@ type ResponsesApiResponse = {
       type?: string;
     }>;
   }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
 };
 type VisionInput = {
   dataUrl: string;
 };
+type ModelUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  calls: number;
+};
+
+let accumulatedUsage: ModelUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  calls: 0
+};
 
 export function hasModelConfig() {
   return Boolean(env.OPENAI_API_KEY);
+}
+
+function addUsage(inputTokens = 0, outputTokens = 0, totalTokens = inputTokens + outputTokens) {
+  accumulatedUsage = {
+    inputTokens: accumulatedUsage.inputTokens + inputTokens,
+    outputTokens: accumulatedUsage.outputTokens + outputTokens,
+    totalTokens: accumulatedUsage.totalTokens + totalTokens,
+    calls: accumulatedUsage.calls + 1
+  };
+}
+
+export function resetModelUsage() {
+  accumulatedUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    calls: 0
+  };
+}
+
+export function consumeModelUsage() {
+  const usage = accumulatedUsage;
+  resetModelUsage();
+  return usage.calls > 0 ? usage : null;
 }
 
 async function complete(messages: ChatMessage[]) {
@@ -52,8 +99,7 @@ async function completeWithChatCompletions(messages: ChatMessage[]) {
     },
     body: JSON.stringify({
       model: env.MODEL_NAME,
-      messages,
-      temperature: 0.4
+      messages
     })
   });
 
@@ -63,6 +109,13 @@ async function completeWithChatCompletions(messages: ChatMessage[]) {
   }
 
   const payload = (await response.json()) as ChatCompletionResponse;
+  if (payload.usage) {
+    addUsage(
+      payload.usage.prompt_tokens ?? 0,
+      payload.usage.completion_tokens ?? 0,
+      payload.usage.total_tokens
+    );
+  }
   const content = payload.choices?.[0]?.message?.content;
 
   if (!content) {
@@ -94,6 +147,13 @@ async function completeWithResponsesApi(messages: ChatMessage[]) {
   }
 
   const payload = (await response.json()) as ResponsesApiResponse;
+  if (payload.usage) {
+    addUsage(
+      payload.usage.input_tokens ?? 0,
+      payload.usage.output_tokens ?? 0,
+      payload.usage.total_tokens
+    );
+  }
   const content =
     payload.output_text ??
     payload.output
@@ -151,6 +211,13 @@ export async function completeVisionText(prompt: string, image: VisionInput) {
   }
 
   const payload = (await response.json()) as ResponsesApiResponse;
+  if (payload.usage) {
+    addUsage(
+      payload.usage.input_tokens ?? 0,
+      payload.usage.output_tokens ?? 0,
+      payload.usage.total_tokens
+    );
+  }
   const content =
     payload.output_text ??
     payload.output

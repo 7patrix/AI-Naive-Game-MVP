@@ -132,9 +132,9 @@ START
 
 职责：
 
-- 估算 prompt、规格和生成产物的 token 数。
-- 根据是否使用 LLM 记录本地 fallback 或 OpenAI-compatible 估算成本。
-- 写入 `GenerationJob.modelInputTokens`、`modelOutputTokens` 和 `estimatedCostCents`。
+- 优先读取模型 API 返回的真实 `usage` token。
+- 如果模型没有返回 usage，则回退为本地 token 估算。
+- 根据 input/output token 写入 `GenerationJob.modelInputTokens`、`modelOutputTokens` 和 `estimatedCostCents`。
 
 ### ModerationAgent
 
