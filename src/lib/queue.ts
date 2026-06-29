@@ -52,7 +52,7 @@ export async function enqueueGenerationJob(jobId: string) {
     GENERATION_JOB_NAME,
     { jobId },
     {
-      jobId: `${jobId}:${Date.now()}`
+      jobId: `${jobId}-${Date.now()}`
     }
   );
 }
