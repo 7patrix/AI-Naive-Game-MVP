@@ -3,6 +3,7 @@ import Link from "next/link";
 type LoginPageProps = {
   searchParams: Promise<{
     error?: string;
+    loggedOut?: string;
     next?: string;
   }>;
 };
@@ -21,6 +22,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       {params.error ? (
         <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {params.error}
+        </div>
+      ) : null}
+      {params.loggedOut ? (
+        <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          已退出登录。你可以重新登录或切换账号。
         </div>
       ) : null}
       <form action="/api/auth/login" className="mt-6 space-y-4" method="post">
