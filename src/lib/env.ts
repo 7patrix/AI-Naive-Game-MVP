@@ -67,4 +67,26 @@ const envSchema = z.object({
     .default("http://localhost:3000/api/auth/google/callback")
 });
 
-export const env = envSchema.parse(process.env);
+let _env: z.infer<typeof envSchema> | undefined;
+
+function getEnv() {
+  if (!_env) {
+    _env = envSchema.parse(process.env);
+  }
+  return _env;
+}
+
+export const env = new Proxy({} as z.infer<typeof envSchema>, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getEnv(), prop, receiver);
+  },
+  ownKeys() {
+    return Reflect.ownKeys(getEnv());
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    return Object.getOwnPropertyDescriptor(getEnv(), prop);
+  },
+  has(_target, prop) {
+    return prop in getEnv();
+  },
+});
