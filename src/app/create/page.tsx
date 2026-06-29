@@ -104,6 +104,10 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     redirect("/login?next=/create");
   }
 
+  if (!user.emailVerifiedAt) {
+    redirect(`/verify-email?email=${encodeURIComponent(user.email)}`);
+  }
+
   const remixSource = params.remixGameId
     ? await db.game.findFirst({
         where: {

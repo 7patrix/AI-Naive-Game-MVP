@@ -96,8 +96,7 @@ export async function GET(request: NextRequest) {
   );
   const primaryEmail =
     emails.find((email) => email.primary && email.verified)?.email ??
-    emails.find((email) => email.verified)?.email ??
-    githubUser.email;
+    emails.find((email) => email.verified)?.email;
 
   if (!primaryEmail) {
     return redirectWithError(request, "GitHub 账号没有可用的已验证邮箱。");
@@ -115,29 +114,46 @@ export async function GET(request: NextRequest) {
   });
 
   if (existingAccount) {
+    if (!existingAccount.user.emailVerifiedAt) {
+      await db.user.update({
+        where: { id: existingAccount.userId },
+        data: { emailVerifiedAt: new Date() }
+      });
+    }
+
     await createSession(existingAccount.userId);
     return NextResponse.redirect(new URL(nextPath, env.APP_URL), { status: 303 });
   }
 
+  const email = primaryEmail.toLowerCase();
   const existingUser = await db.user.findUnique({
-    where: { email: primaryEmail.toLowerCase() }
+    where: { email }
   });
+  const verifiedAt = new Date();
   const user =
-    existingUser ??
-    (await db.user.create({
+    existingUser
+      ? await db.user.update({
+          where: { id: existingUser.id },
+          data: {
+            emailVerifiedAt: existingUser.emailVerifiedAt ?? verifiedAt,
+            avatarUrl: existingUser.avatarUrl ?? githubUser.avatar_url
+          }
+        })
+      : await db.user.create({
       data: {
-        email: primaryEmail.toLowerCase(),
+        email,
         name: githubUser.name ?? githubUser.login,
         avatarUrl: githubUser.avatar_url,
+        emailVerifiedAt: verifiedAt,
         passwordHash: await hashPassword(randomBytes(32).toString("hex"))
       }
-    }));
+    });
 
   await db.oAuthAccount.create({
     data: {
       provider: "github",
       providerAccountId,
-      email: primaryEmail.toLowerCase(),
+      email,
       userId: user.id
     }
   });

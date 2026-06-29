@@ -27,6 +27,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "resend": "^6.16.0",
     "undici": "^8.5.0",
     "zod": "latest"
   },

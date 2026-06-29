@@ -53,6 +53,9 @@ const envSchema = z.object({
   MODEL_NAME: z.string().default("gpt-5.5"),
   MODEL_WIRE_API: z.enum(["chat", "responses"]).default("chat"),
   OUTBOUND_PROXY_URL: z.string().url().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("AI Native Game <onboarding@resend.dev>"),
+  EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
   GITHUB_REDIRECT_URI: z

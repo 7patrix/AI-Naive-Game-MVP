@@ -93,6 +93,13 @@ export async function GET(request: NextRequest) {
   });
 
   if (existingAccount) {
+    if (!existingAccount.user.emailVerifiedAt) {
+      await db.user.update({
+        where: { id: existingAccount.userId },
+        data: { emailVerifiedAt: new Date() }
+      });
+    }
+
     await createSession(existingAccount.userId);
     return NextResponse.redirect(new URL(nextPath, env.APP_URL), { status: 303 });
   }
@@ -100,16 +107,25 @@ export async function GET(request: NextRequest) {
   const existingUser = await db.user.findUnique({
     where: { email }
   });
+  const verifiedAt = new Date();
   const user =
-    existingUser ??
-    (await db.user.create({
+    existingUser
+      ? await db.user.update({
+          where: { id: existingUser.id },
+          data: {
+            emailVerifiedAt: existingUser.emailVerifiedAt ?? verifiedAt,
+            avatarUrl: existingUser.avatarUrl ?? googleUser.picture
+          }
+        })
+      : await db.user.create({
       data: {
         email,
         name: googleUser.name ?? email.split("@")[0],
         avatarUrl: googleUser.picture,
+        emailVerifiedAt: verifiedAt,
         passwordHash: await hashPassword(randomBytes(32).toString("hex"))
       }
-    }));
+    });
 
   await db.oAuthAccount.create({
     data: {

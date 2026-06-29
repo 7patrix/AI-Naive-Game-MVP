@@ -56,6 +56,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?next=/create", request.url), { status: 303 });
   }
 
+  if (!user.emailVerifiedAt) {
+    const url = new URL("/verify-email", request.url);
+    url.searchParams.set("email", user.email);
+    return NextResponse.redirect(url, { status: 303 });
+  }
+
   const formData = await request.formData();
   const parsed = createJobSchema.safeParse({
     prompt: formData.get("prompt"),

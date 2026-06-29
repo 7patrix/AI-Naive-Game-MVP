@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSession, verifyPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { sendVerificationEmail } from "@/lib/email";
+import { createEmailVerificationToken } from "@/lib/email-verification";
 import { env } from "@/lib/env";
 
 const loginSchema = z.object({
@@ -26,6 +28,19 @@ function safeNextPath(next?: string) {
   return next;
 }
 
+function redirectToVerifyEmail(email: string) {
+  const url = new URL("/verify-email", env.APP_URL);
+  url.searchParams.set("email", email);
+  return NextResponse.redirect(url, { status: 303 });
+}
+
+async function sendVerificationLink(userId: string, email: string) {
+  const token = await createEmailVerificationToken(userId, email);
+  const verifyUrl = new URL("/api/auth/verify-email", env.APP_URL);
+  verifyUrl.searchParams.set("token", token);
+  await sendVerificationEmail({ to: email, verifyUrl: verifyUrl.toString() });
+}
+
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const parsed = loginSchema.safeParse({
@@ -46,6 +61,17 @@ export async function POST(request: NextRequest) {
 
   if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
     return redirectWithError(request, "邮箱或密码不正确。", parsed.data.next);
+  }
+
+  if (!user.emailVerifiedAt) {
+    try {
+      await sendVerificationLink(user.id, user.email);
+    } catch (error) {
+      console.error("Failed to send verification email", error);
+      return redirectWithError(request, "验证邮件发送失败，请稍后重试。", parsed.data.next);
+    }
+
+    return redirectToVerifyEmail(user.email);
   }
 
   await createSession(user.id);
