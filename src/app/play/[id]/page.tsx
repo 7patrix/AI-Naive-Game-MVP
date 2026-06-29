@@ -76,6 +76,7 @@ export default async function PlayPage({ params }: PlayPageProps) {
       }
     })
   ]);
+  const runtimeEntryUrl = `/api/games/${game.id}/bundle`;
 
   return (
     <div className="space-y-6">
@@ -107,7 +108,7 @@ export default async function PlayPage({ params }: PlayPageProps) {
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <p className="text-sm font-medium text-slate-700">iframe 入口</p>
+            <p className="text-sm font-medium text-slate-700">对象存储 Bundle 源地址</p>
             <p className="mt-2 break-all font-mono text-xs text-slate-600">
               {manifest?.entryUrl ?? "等待 Manifest 加载成功"}
             </p>
@@ -117,7 +118,7 @@ export default async function PlayPage({ params }: PlayPageProps) {
 
       {manifest ? (
         <PlayFrame
-          entryUrl={manifest.entryUrl}
+          entryUrl={runtimeEntryUrl}
           gameId={game.id}
           manifestUrl={game.manifestUrl}
           permissions={manifest.permissions}

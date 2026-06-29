@@ -44,7 +44,7 @@ export function CreatePreviewPanel({ job }: CreatePreviewPanelProps) {
       {canPreview && job.game ? (
         <PlayFrame
           compact
-          entryUrl={job.game.bundleUrl ?? ""}
+          entryUrl={`/api/games/${job.game.id}/bundle`}
           gameId={job.game.id}
           height={420}
           manifestUrl={job.game.manifestUrl}
