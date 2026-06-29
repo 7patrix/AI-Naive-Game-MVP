@@ -45,7 +45,8 @@ export function PlayFrame({
   const frameRef = useRef<HTMLIFrameElement>(null);
   const startedAt = useRef<number>(0);
   const hasReported = useRef(false);
-  const frameHeight = typeof height === "number" ? `${height}px` : height;
+  const [measuredHeight, setMeasuredHeight] = useState<string | null>(null);
+  const frameHeight = measuredHeight ?? (typeof height === "number" ? `${height}px` : height);
 
   useEffect(() => {
     if (state !== "loading") {
@@ -77,6 +78,7 @@ export function PlayFrame({
       return;
     }
 
+    const handleResize = () => resizeFrameToContent();
     function forwardKey(event: KeyboardEvent, phase: "keydown" | "keyup") {
       if (!forwardedKeys.has(event.key)) {
         return;
@@ -98,25 +100,53 @@ export function PlayFrame({
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("resize", handleResize);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("resize", handleResize);
     };
   }, [state, runId]);
 
   function startGame() {
     startedAt.current = Date.now();
     hasReported.current = false;
+    setMeasuredHeight(null);
     setState("loading");
     setRunId((current) => current + 1);
     window.setTimeout(() => frameRef.current?.focus(), 0);
+  }
+
+  function resizeFrameToContent() {
+    if (compact) {
+      return;
+    }
+
+    try {
+      const documentElement = frameRef.current?.contentDocument?.documentElement;
+      const body = frameRef.current?.contentDocument?.body;
+      const contentHeight = Math.max(
+        documentElement?.scrollHeight ?? 0,
+        body?.scrollHeight ?? 0,
+        frameRef.current?.contentWindow?.innerHeight ?? 0
+      );
+
+      if (contentHeight > 0) {
+        setMeasuredHeight(`${Math.ceil(contentHeight)}px`);
+      }
+    } catch {
+      // Cross-origin access can fail for non-proxied bundles. Keep the configured height.
+    }
   }
 
   function handleLoad() {
     const durationMs = Date.now() - startedAt.current;
     setState("loaded");
     frameRef.current?.focus();
+    resizeFrameToContent();
+    window.setTimeout(resizeFrameToContent, 100);
+    window.setTimeout(resizeFrameToContent, 500);
 
     if (hasReported.current) {
       return;
