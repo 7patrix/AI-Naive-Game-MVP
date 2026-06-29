@@ -3,6 +3,7 @@ import { GameStatus, GenerationJobStatus, ModerationStatus, UploadedAssetKind } 
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { enqueueGenerationJob } from "@/lib/queue";
 import { uploadObject } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -218,6 +219,8 @@ export async function POST(request: NextRequest) {
       }
     });
   }
+
+  await enqueueGenerationJob(job.id);
 
   const url = new URL("/create", request.url);
   url.searchParams.set("job", job.id);

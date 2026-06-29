@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { Worker as BullWorker } from "bullmq";
 import type { RemoteGameManifest } from "../../src/lib/game-manifest";
 import {
   completeJson,
@@ -9,12 +11,17 @@ import {
   hasModelConfig,
   resetModelUsage
 } from "../../src/lib/model-client";
+import {
+  GENERATION_JOB_NAME,
+  GENERATION_QUEUE_NAME,
+  createBullMqConnectionOptions,
+  type GenerationQueuePayload
+} from "../../src/lib/queue";
 import { uploadObject } from "../../src/lib/storage";
 
 const prisma = new PrismaClient();
-const POLL_INTERVAL_MS = 3000;
 
-type Job = NonNullable<Awaited<ReturnType<typeof claimNextJob>>>;
+type Job = NonNullable<Awaited<ReturnType<typeof claimJob>>>;
 type GameSpec = {
   title: string;
   genre: string;
@@ -60,6 +67,23 @@ type CostEstimate = {
   modelCalls: number;
 };
 type PublishResult = Awaited<ReturnType<typeof runPublisherAgent>>;
+type ReviewReport = {
+  passed: boolean;
+  reason: string;
+  retryable: boolean;
+  checks: {
+    externalScripts: "passed" | "blocked";
+    sandboxRequired: true;
+    maxBundleFiles: number;
+    allowedAssetUrls: string[];
+    forbiddenFileUpload: "passed" | "blocked";
+  };
+};
+type ArtifactRef = {
+  type: string;
+  version: number;
+  artifactId: string;
+};
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,6 +100,47 @@ function escapeHtml(value: string) {
 
 function jsonForScript(value: unknown) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function hashArtifactPayload(payload: unknown) {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+async function writeArtifact(jobId: string, type: string, payload: unknown, storageKey?: string, publicUrl?: string) {
+  const latest = await prisma.jobArtifact.findFirst({
+    where: {
+      jobId,
+      type
+    },
+    orderBy: {
+      version: "desc"
+    },
+    select: {
+      version: true
+    }
+  });
+  const version = (latest?.version ?? 0) + 1;
+  const artifact = await prisma.jobArtifact.create({
+    data: {
+      jobId,
+      type,
+      version,
+      payload: payload as object,
+      storageKey,
+      publicUrl,
+      sha256: hashArtifactPayload({ payload, storageKey, publicUrl })
+    }
+  });
+
+  return {
+    type,
+    version,
+    artifactId: artifact.id
+  };
+}
+
+function buildSearchText(spec: GameSpec) {
+  return [spec.title, spec.description, spec.genre, spec.coreLoop, ...spec.tags].join(" ").toLowerCase();
 }
 
 function getInputAssets(job: Job): InputAsset[] {
@@ -631,35 +696,35 @@ function generateCoverSvg(spec: GameSpec) {
 </svg>`;
 }
 
-async function claimNextJob() {
-  const job = await prisma.generationJob.findFirst({
+async function claimJob(jobId: string) {
+  const claimed = await prisma.generationJob.updateMany({
     where: {
+      id: jobId,
       status: GenerationJobStatus.PENDING
-    },
-    orderBy: {
-      createdAt: "asc"
-    }
-  });
-
-  if (!job) {
-    return null;
-  }
-
-  return prisma.generationJob.update({
-    where: {
-      id: job.id
     },
     data: {
       status: GenerationJobStatus.RUNNING,
       progress: 10,
-      startedAt: new Date(),
-      logs: {
-        create: {
-          agentName: "Worker",
-          step: "job_started",
-          message: "Worker 已领取任务，开始执行 Agent 流水线。"
-        }
-      }
+      startedAt: new Date()
+    }
+  });
+
+  if (claimed.count === 0) {
+    return null;
+  }
+
+  await prisma.agentLog.create({
+    data: {
+      jobId,
+      agentName: "Worker",
+      step: "job_started",
+      message: "BullMQ Worker 已领取任务，开始执行 Agent 流水线。"
+    }
+  });
+
+  return prisma.generationJob.findUnique({
+    where: {
+      id: jobId
     },
     include: {
       parentGame: true,
@@ -786,8 +851,10 @@ async function runAssetAnalyzerAgent(job: Job) {
   }
 
   const analyses = await Promise.all(assets.map(analyzeAsset));
+  const artifact = await writeArtifact(job.id, "asset-analysis.v1", analyses);
   await addLog(job.id, "AssetAnalyzerAgent", "assets_analyzed", `已分析 ${analyses.length} 个上传素材。`, {
-    analyses
+    analyses,
+    artifact
   });
   await updateProgress(job.id, 22);
   return analyses;
@@ -861,13 +928,14 @@ async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[]) {
     source,
     spec,
     remixContext: getRemixContext(job) || null,
-    assetContext
+    assetContext,
+    artifact: await writeArtifact(job.id, "game-spec.v1", spec)
   });
   await updateProgress(job.id, 30);
   return spec;
 }
 
-async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnalysis[]) {
+async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnalysis[], mode: "initial" | "revision" | "fallback" = "initial") {
   const bundlePlan: BundlePlan = {
     entry: "index.html",
     runtime: "iframe sandbox",
@@ -876,7 +944,7 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
   };
   const assetContext = buildAssetContext(assetAnalyses);
 
-  if (hasModelConfig()) {
+  if (mode !== "fallback" && hasModelConfig()) {
     try {
       const html = await completeText(
         "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。",
@@ -906,35 +974,51 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
     job.id,
     "CoderAgent",
     "bundle_planned",
-    `已规划 Web 游戏产物结构，代码来源：${bundlePlan.generator}。`,
-    { spec, bundlePlan }
+    `已规划 Web 游戏产物结构，代码来源：${bundlePlan.generator}，模式：${mode}。`,
+    { spec, bundlePlan, mode, artifact: await writeArtifact(job.id, "code-bundle.v1", bundlePlan) }
   );
   await updateProgress(job.id, 55);
   return bundlePlan;
 }
 
-async function runReviewerAgent(job: Job, bundlePlan: BundlePlan, assetAnalyses: AssetAnalysis[]) {
+async function runReviewerAgent(job: Job, bundlePlan: BundlePlan, assetAnalyses: AssetAnalysis[]): Promise<ReviewReport> {
   const allowedAssetUrls = assetAnalyses.map((asset) => asset.publicUrl);
+  const html = bundlePlan.html ?? "";
+  const lowerHtml = html.toLowerCase();
+  const hasExternalScripts = /<script[^>]+src=["']/i.test(html);
+  const forbiddenFileUpload =
+    /<input[^>]+type=["']?file/i.test(html) ||
+    lowerHtml.includes("filereader") ||
+    lowerHtml.includes("createobjecturl");
   const checks = {
-    externalScripts: "blocked",
+    externalScripts: hasExternalScripts ? "blocked" : "passed",
     sandboxRequired: true,
     maxBundleFiles: 20,
-    allowedAssetUrls
+    allowedAssetUrls,
+    forbiddenFileUpload: forbiddenFileUpload ? "blocked" : "passed"
+  } satisfies ReviewReport["checks"];
+  const passed = !hasExternalScripts && !forbiddenFileUpload && bundlePlan.files.length <= checks.maxBundleFiles;
+  const report: ReviewReport = {
+    passed,
+    retryable: !passed,
+    reason: passed ? "生成产物通过基础安全规则检查。" : "生成产物未通过基础安全规则，需要 Coder 修订或回退。",
+    checks
   };
 
-  await addLog(job.id, "ReviewerAgent", "safety_checked", "已完成基础安全规则检查。", {
+  await addLog(job.id, "ReviewerAgent", passed ? "review_passed" : "review_failed", report.reason, {
     bundlePlan,
-    checks
+    report,
+    artifact: await writeArtifact(job.id, "review-report.v1", report)
   });
   await updateProgress(job.id, 75);
-  return checks;
+  return report;
 }
 
 async function runPublisherAgent(
   job: Job,
   spec: GameSpec,
   bundlePlan: BundlePlan,
-  checks: object,
+  reviewReport: ReviewReport,
   assetAnalyses: AssetAnalysis[]
 ) {
   const versionNumber = 1;
@@ -982,6 +1066,7 @@ async function runPublisherAgent(
       manifestUrl: manifestUpload.url,
       bundleUrl: htmlUpload.url,
       storagePrefix,
+      searchText: buildSearchText(spec),
       currentVersionNumber: versionNumber,
       authorId: job.userId,
       createdByJobId: job.id,
@@ -1022,7 +1107,7 @@ async function runPublisherAgent(
     remixSourceVersionId: job.remixSourceVersionId,
     spec,
     bundlePlan,
-    checks
+    reviewReport
   };
 
   await addLog(
@@ -1030,7 +1115,16 @@ async function runPublisherAgent(
     "PublisherAgent",
     "game_published",
     "已生成游戏 HTML、Manifest 和封面，并上传到 MinIO，同时创建已发布 Game 记录。",
-    publishResult
+    {
+      ...publishResult,
+      artifact: await writeArtifact(
+        job.id,
+        "publish-result.v1",
+        publishResult,
+        `${storagePrefix}/manifest.json`,
+        manifestUpload.url
+      )
+    }
   );
   await updateProgress(job.id, 95);
   return publishResult;
@@ -1050,9 +1144,17 @@ const GenerationGraphState = Annotation.Root({
     reducer: (_, next) => next,
     default: () => undefined
   }),
-  checks: Annotation<object | undefined>({
+  reviewReport: Annotation<ReviewReport | undefined>({
     reducer: (_, next) => next,
     default: () => undefined
+  }),
+  retryCount: Annotation<number>({
+    reducer: (_, next) => next,
+    default: () => 0
+  }),
+  artifactRefs: Annotation<ArtifactRef[]>({
+    reducer: (current, next) => [...current, ...next],
+    default: () => []
   }),
   publishResult: Annotation<PublishResult | undefined>({
     reducer: (_, next) => next,
@@ -1085,17 +1187,47 @@ function createGenerationGraph() {
       await wait(250);
       return { bundlePlan };
     })
+    .addNode("coder_revision", async (state) => {
+      if (!state.spec) {
+        throw new Error("CoderRevisionAgent is missing a game spec.");
+      }
+
+      await addLog(
+        state.job.id,
+        "CoderRevisionAgent",
+        "revision_started",
+        "Reviewer 未通过，开始生成修订版产物。"
+      );
+      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, "revision");
+      await wait(250);
+      return { bundlePlan, retryCount: state.retryCount + 1 };
+    })
+    .addNode("fallback_coder", async (state) => {
+      if (!state.spec) {
+        throw new Error("FallbackCoderAgent is missing a game spec.");
+      }
+
+      await addLog(
+        state.job.id,
+        "FallbackCoderAgent",
+        "fallback_started",
+        "Reviewer 多次未通过，切换到本地安全模板生成器。"
+      );
+      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, "fallback");
+      await wait(250);
+      return { bundlePlan, retryCount: state.retryCount + 1 };
+    })
     .addNode("reviewer", async (state) => {
       if (!state.bundlePlan) {
         throw new Error("CoderAgent did not produce a bundle plan.");
       }
 
-      const checks = await runReviewerAgent(state.job, state.bundlePlan, state.assetAnalyses);
+      const reviewReport = await runReviewerAgent(state.job, state.bundlePlan, state.assetAnalyses);
       await wait(250);
-      return { checks };
+      return { reviewReport };
     })
     .addNode("publisher", async (state) => {
-      if (!state.spec || !state.bundlePlan || !state.checks) {
+      if (!state.spec || !state.bundlePlan || !state.reviewReport) {
         throw new Error("PublisherAgent is missing upstream generation state.");
       }
 
@@ -1103,7 +1235,7 @@ function createGenerationGraph() {
         state.job,
         state.spec,
         state.bundlePlan,
-        state.checks,
+        state.reviewReport,
         state.assetAnalyses
       );
       return { publishResult };
@@ -1114,26 +1246,43 @@ function createGenerationGraph() {
       }
 
       const costEstimate = estimateGenerationCost(state.job, state.spec, state.bundlePlan);
-      await addLog(state.job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", costEstimate);
+      await addLog(state.job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", {
+        ...costEstimate,
+        artifact: await writeArtifact(state.job.id, "cost-report.v1", costEstimate)
+      });
       return { costEstimate };
     })
     .addEdge(START, "asset_analyzer")
     .addEdge("asset_analyzer", "planner")
     .addEdge("planner", "coder")
     .addEdge("coder", "reviewer")
-    .addEdge("reviewer", "publisher")
+    .addEdge("coder_revision", "reviewer")
+    .addEdge("fallback_coder", "reviewer")
+    .addConditionalEdges(
+      "reviewer",
+      (state) => {
+        if (state.reviewReport?.passed) return "publisher";
+        if ((state.retryCount ?? 0) < 2) return "coder_revision";
+        return "fallback_coder";
+      },
+      {
+        publisher: "publisher",
+        coder_revision: "coder_revision",
+        fallback_coder: "fallback_coder"
+      }
+    )
     .addEdge("publisher", "cost")
     .addEdge("cost", END)
     .compile();
 }
 
-async function processJob(job: Job) {
+async function runClaimedJob(job: Job) {
   try {
     resetModelUsage();
     const graph = createGenerationGraph();
     const result = await graph.invoke({ job });
 
-    if (!result.spec || !result.bundlePlan || !result.checks || !result.publishResult || !result.costEstimate) {
+    if (!result.spec || !result.bundlePlan || !result.reviewReport || !result.publishResult || !result.costEstimate) {
       throw new Error("LangGraph generation finished with incomplete state.");
     }
 
@@ -1150,9 +1299,10 @@ async function processJob(job: Job) {
         estimatedCostCents: result.costEstimate.estimatedCostCents,
         result: {
           orchestration: "langgraph",
+          artifactDriven: true,
           spec: result.spec,
           bundlePlan: result.bundlePlan,
-          checks: result.checks,
+          reviewReport: result.reviewReport,
           publishResult: result.publishResult,
           costEstimate: result.costEstimate
         },
@@ -1188,28 +1338,50 @@ async function processJob(job: Job) {
   }
 }
 
-async function main() {
-  console.log("Generator worker started. Polling pending jobs...");
+async function processQueuedJob(payload: GenerationQueuePayload) {
+  const job = await claimJob(payload.jobId);
 
-  while (true) {
-    const job = await claimNextJob();
-
-    if (job) {
-      console.log(`Processing generation job ${job.id}`);
-      await processJob(job);
-      console.log(`Finished generation job ${job.id}`);
-    } else {
-      await wait(POLL_INTERVAL_MS);
-    }
+  if (!job) {
+    console.log(`Skipping generation job ${payload.jobId}; it is not pending.`);
+    return;
   }
+
+  console.log(`Processing generation job ${job.id}`);
+  await runClaimedJob(job);
+  console.log(`Finished generation job ${job.id}`);
+}
+
+const generationWorker = new BullWorker<GenerationQueuePayload, void, typeof GENERATION_JOB_NAME>(
+  GENERATION_QUEUE_NAME,
+  async (queueJob) => {
+    if (queueJob.name !== GENERATION_JOB_NAME) {
+      throw new Error(`Unsupported queue job: ${queueJob.name}`);
+    }
+
+    await processQueuedJob(queueJob.data);
+  },
+  {
+    connection: createBullMqConnectionOptions(),
+    concurrency: Number(process.env.GENERATION_WORKER_CONCURRENCY ?? 2)
+  }
+);
+
+async function main() {
+  console.log(`Generator worker started. Listening on BullMQ queue "${GENERATION_QUEUE_NAME}"...`);
+
+  generationWorker.on("failed", (job, error) => {
+    console.error(`Queue job ${job?.id ?? "unknown"} failed`, error);
+  });
 }
 
 process.on("SIGINT", async () => {
+  await generationWorker.close();
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
+  await generationWorker.close();
   await prisma.$disconnect();
   process.exit(0);
 });

@@ -7,23 +7,50 @@ type HomePageProps = {
     q?: string;
     tag?: string;
     sort?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 };
 
 export const dynamic = "force-dynamic";
 
+const DEFAULT_PAGE_SIZE = 12;
+const MAX_PAGE_SIZE = 48;
+
+function clampPage(value: string | undefined) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function clampPageSize(value: string | undefined) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_PAGE_SIZE;
+  return Math.min(parsed, MAX_PAGE_SIZE);
+}
+
+function buildPageHref(params: { q: string; tag: string; sort: string; pageSize: number }, page: number) {
+  const nextParams = new URLSearchParams();
+  if (params.q) nextParams.set("q", params.q);
+  if (params.tag) nextParams.set("tag", params.tag);
+  if (params.sort !== "latest") nextParams.set("sort", params.sort);
+  if (params.pageSize !== DEFAULT_PAGE_SIZE) nextParams.set("pageSize", String(params.pageSize));
+  if (page > 1) nextParams.set("page", String(page));
+  return `/?${nextParams.toString()}`;
+}
+
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
   const tag = params.tag?.trim() ?? "";
-  const sort = params.sort ?? "latest";
+  const sort = ["latest", "plays", "likes"].includes(params.sort ?? "") ? (params.sort as string) : "latest";
+  const page = clampPage(params.page);
+  const pageSize = clampPageSize(params.pageSize);
   const where: Prisma.GameWhereInput = {
     status: GameStatus.PUBLISHED,
     ...(query
       ? {
           OR: [
-            { title: { contains: query, mode: "insensitive" } },
-            { description: { contains: query, mode: "insensitive" } },
+            { searchText: { contains: query.toLowerCase(), mode: "insensitive" } },
             { tags: { has: query } },
             { author: { name: { contains: query, mode: "insensitive" } } },
             { author: { email: { contains: query, mode: "insensitive" } } }
@@ -32,37 +59,53 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       : {}),
     ...(tag ? { tags: { has: tag } } : {})
   };
+  const orderBy: Prisma.GameOrderByWithRelationInput =
+    sort === "plays"
+      ? { playCount: "desc" }
+      : sort === "likes"
+        ? { likeCount: "desc" }
+        : { publishedAt: "desc" };
 
-  const games = await db.game.findMany({
-    where,
-    include: {
-      author: {
-        select: {
-          name: true,
-          email: true
+  const [games, totalGames, publishedCount, tags] = await Promise.all([
+    db.game.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        coverUrl: true,
+        tags: true,
+        playCount: true,
+        likeCount: true,
+        favoriteCount: true,
+        publishedAt: true,
+        author: {
+          select: {
+            name: true,
+            email: true
+          }
         }
       },
-      _count: {
-        select: {
-          likes: true,
-          favorites: true
-        }
-      }
-    },
-    orderBy: {
-      publishedAt: "desc"
-    }
-  });
-  const publishedGames = await db.game.findMany({
-    where: { status: GameStatus.PUBLISHED },
-    select: { tags: true }
-  });
-  const allTags = Array.from(new Set(publishedGames.flatMap((game) => game.tags))).sort();
-  const sortedGames = [...games].sort((left, right) => {
-    if (sort === "plays") return right.playCount - left.playCount;
-    if (sort === "likes") return right._count.likes - left._count.likes;
-    return (right.publishedAt?.getTime() ?? 0) - (left.publishedAt?.getTime() ?? 0);
-  });
+      orderBy: [orderBy, { id: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    }),
+    db.game.count({ where }),
+    db.game.count({ where: { status: GameStatus.PUBLISHED } }),
+    db.$queryRaw<{ tag: string }[]>`
+      SELECT tag
+      FROM "Game", unnest("tags") AS tag
+      WHERE "status" = ${GameStatus.PUBLISHED}::"GameStatus"
+      GROUP BY tag
+      ORDER BY count(*) DESC, tag ASC
+      LIMIT 50
+    `
+  ]);
+  const allTags = tags.map((item) => item.tag);
+  const totalPages = Math.max(1, Math.ceil(totalGames / pageSize));
+  const previousHref = buildPageHref({ q: query, tag, sort, pageSize }, Math.max(1, page - 1));
+  const nextHref = buildPageHref({ q: query, tag, sort, pageSize }, Math.min(totalPages, page + 1));
 
   return (
     <div className="space-y-10">
@@ -96,7 +139,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </p>
             <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-2xl bg-white/10 p-4">
-                <p className="text-2xl font-bold">{publishedGames.length}</p>
+                <p className="text-2xl font-bold">{publishedCount}</p>
                 <p className="mt-1 text-slate-300">已发布</p>
               </div>
               <div className="rounded-2xl bg-white/10 p-4">
@@ -113,7 +156,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div>
             <h2 className="text-2xl font-semibold text-slate-950">已发布游戏</h2>
             <p className="mt-1 text-slate-600">
-              这些游戏记录来自 PostgreSQL，包括系统预置的演示数据。
+              这些游戏记录来自 PostgreSQL，搜索、筛选、排序和分页都下推到数据库。
             </p>
           </div>
         </div>
@@ -150,9 +193,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             筛选
           </button>
         </form>
-        {sortedGames.length > 0 ? (
+        {games.length > 0 ? (
           <div className="grid gap-5 md:grid-cols-3">
-            {sortedGames.map((game) => (
+            {games.map((game) => (
               <article
                 className="group overflow-hidden rounded-3xl border border-white/70 bg-white shadow-xl shadow-slate-200/60 transition duration-200 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-200/60"
                 key={game.id}
@@ -185,12 +228,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{game.description}</p>
                   <div className="mt-5 flex items-center justify-between text-xs text-slate-500">
                     <span>作者：{game.author.name ?? game.author.email}</span>
-                    <span>{game._count.likes} 赞</span>
+                    <span>{game.likeCount} 赞</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                     <span>发布时间：{game.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}</span>
                     <span>
-                      {game._count.likes} 赞 / {game._count.favorites} 收藏
+                      {game.likeCount} 赞 / {game.favoriteCount} 收藏
                     </span>
                   </div>
                   <div className="mt-5 grid grid-cols-2 gap-3">
@@ -216,6 +259,37 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             暂时还没有已发布游戏。你可以先导入测试数据，或创建第一个游戏。
           </div>
         )}
+        {totalGames > 0 ? (
+          <div className="mt-8 flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 text-sm text-slate-600 shadow-sm md:flex-row">
+            <span>
+              第 {page} / {totalPages} 页，共 {totalGames} 个匹配游戏
+            </span>
+            <div className="flex gap-2">
+              <Link
+                aria-disabled={page <= 1}
+                className={`rounded-xl border px-4 py-2 font-semibold ${
+                  page <= 1
+                    ? "pointer-events-none border-slate-200 text-slate-300"
+                    : "border-slate-300 text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
+                }`}
+                href={previousHref}
+              >
+                上一页
+              </Link>
+              <Link
+                aria-disabled={page >= totalPages}
+                className={`rounded-xl border px-4 py-2 font-semibold ${
+                  page >= totalPages
+                    ? "pointer-events-none border-slate-200 text-slate-300"
+                    : "border-slate-300 text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
+                }`}
+                href={nextHref}
+              >
+                下一页
+              </Link>
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
   );

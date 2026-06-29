@@ -1,0 +1,150 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { CreatePreviewPanel } from "./CreatePreviewPanel";
+import { JobTimeline } from "./JobTimeline";
+import type { CreateJob } from "./types";
+
+type RemixSource = {
+  id: string;
+  title: string;
+  description: string;
+  currentVersionNumber: number;
+} | null;
+
+type CreateWorkspaceProps = {
+  userEmail: string;
+  initialJobs: CreateJob[];
+  selectedJobId: string | null;
+  error: string | null;
+  remixSource: RemixSource;
+};
+
+function isActiveJob(job: CreateJob) {
+  return job.status === "PENDING" || job.status === "RUNNING";
+}
+
+export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, remixSource }: CreateWorkspaceProps) {
+  const [jobs, setJobs] = useState(initialJobs);
+  const [activeJobId, setActiveJobId] = useState(
+    selectedJobId ?? initialJobs.find(isActiveJob)?.id ?? initialJobs[0]?.id ?? null
+  );
+
+  const activeJob = useMemo(() => jobs.find((job) => job.id === activeJobId) ?? null, [activeJobId, jobs]);
+
+  useEffect(() => {
+    if (!activeJob || !isActiveJob(activeJob)) {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/generation-jobs/${activeJob.id}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { job: CreateJob };
+
+        setJobs((currentJobs) => {
+          const existingIndex = currentJobs.findIndex((job) => job.id === data.job.id);
+          if (existingIndex === -1) return [data.job, ...currentJobs];
+          const nextJobs = [...currentJobs];
+          nextJobs[existingIndex] = data.job;
+          return nextJobs;
+        });
+      } catch {
+        // Polling is best effort; the next interval or page navigation can recover.
+      }
+    }, 3000);
+
+    return () => window.clearInterval(interval);
+  }, [activeJob]);
+
+  return (
+    <div className="grid gap-8 xl:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.05fr)]">
+      <div className="space-y-8">
+        {selectedJobId ? (
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+            生成任务已创建：<span className="font-mono">{selectedJobId}</span>。Worker 会异步处理它。
+          </div>
+        ) : null}
+        {error ? (
+          <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>
+        ) : null}
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">创作者工作台</p>
+          <h1 className="mt-3 text-3xl font-bold text-slate-950">输入创意生成小游戏</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            左侧提交 prompt 和素材，后台 BullMQ Worker 执行 Agent 流水线；右侧会轮询当前任务并在发布后展示预览。
+          </p>
+          <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+            当前登录账号：<span className="font-semibold">{userEmail}</span>。这里创建的生成任务会绑定到该账号。
+          </div>
+          {remixSource ? (
+            <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+              正在 Remix：<span className="font-semibold">{remixSource.title}</span> v
+              {remixSource.currentVersionNumber}。提交后会记录源游戏和源版本。
+            </div>
+          ) : null}
+          <form action="/api/generation-jobs" className="mt-6 space-y-4" encType="multipart/form-data" method="post">
+            {remixSource ? <input name="remixGameId" type="hidden" value={remixSource.id} /> : null}
+            <textarea
+              className="min-h-40 w-full rounded-xl border border-slate-300 px-4 py-3"
+              defaultValue={
+                remixSource
+                  ? `Remix《${remixSource.title}》：保留核心玩法，但加入新的关卡目标、视觉反馈和节奏变化。源游戏简介：${remixSource.description}`
+                  : undefined
+              }
+              name="prompt"
+              placeholder="描述一个小游戏创意，例如：做一个太空飞船躲避陨石的小游戏。"
+              required
+            />
+            <input className="w-full rounded-xl border border-slate-300 px-4 py-3" multiple name="assets" type="file" />
+            <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white" type="submit">
+              创建生成任务
+            </button>
+          </form>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">任务历史</p>
+              <h2 className="mt-3 text-2xl font-bold text-slate-950">最近生成任务</h2>
+            </div>
+            <p className="text-sm text-slate-500">点击任一任务可切换右侧实时预览。</p>
+          </div>
+
+          {jobs.length > 0 ? (
+            <div className="mt-6 space-y-5">
+              {jobs.map((job) => (
+                <article
+                  className={`rounded-2xl border p-5 text-left transition ${
+                    job.id === activeJobId ? "border-indigo-300 bg-indigo-50/40" : "border-slate-200 bg-white"
+                  }`}
+                  key={job.id}
+                  onClick={() => setActiveJobId(job.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setActiveJobId(job.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <JobTimeline job={job} />
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-600">
+              暂无生成任务。提交上方表单后，这里会显示任务状态和 Agent 日志。
+            </div>
+          )}
+        </section>
+      </div>
+
+      <CreatePreviewPanel job={activeJob} />
+    </div>
+  );
+}

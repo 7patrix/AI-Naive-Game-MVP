@@ -2,7 +2,7 @@
 
 ## 总览
 
-生成系统由 `GenerationJob`、独立 Worker 和 LangGraph `StateGraph` 驱动。用户在 Create 页面提交创意后，请求不会同步等待游戏生成完成，而是先创建任务，再由 Worker 异步处理。
+生成系统由 `GenerationJob`、Redis/BullMQ、独立 Worker、`JobArtifact` 和 LangGraph `StateGraph` 驱动。用户在 Create 页面提交创意后，请求不会同步等待游戏生成完成，而是先创建任务并把 `{ jobId }` 写入队列，再由 Worker 异步处理。
 
 ```text
 PENDING -> RUNNING -> SUCCEEDED / FAILED
@@ -18,6 +18,10 @@ START
   -> planner
   -> coder
   -> reviewer
+    -> publisher            when review passed
+    -> coder_revision       when review failed and retry < 2
+    -> fallback_coder       when retries exhausted
+  -> reviewer
   -> publisher
   -> cost
   -> END
@@ -25,12 +29,27 @@ START
 
 ## Worker 流程
 
-1. 轮询最早的 `PENDING` 任务。
-2. 将任务状态改为 `RUNNING`，进度设为 10。
+1. BullMQ Worker 从 Redis 队列消费 `{ jobId }`。
+2. 按 `jobId` 原子领取 `PENDING` 任务，将状态改为 `RUNNING`，进度设为 10。
 3. 创建并执行 LangGraph `StateGraph`。
-4. 图节点依次执行 AssetAnalyzer、Planner、Coder、Reviewer、Publisher、Cost。
+4. 图节点执行 AssetAnalyzer、Planner、Coder、Reviewer；Reviewer 根据报告决定发布、修订或 fallback。
 5. 成功后状态改为 `SUCCEEDED`，进度 100。
 6. 失败后状态改为 `FAILED`，记录错误信息。
+
+队列只传 `jobId`，不传 prompt、文件列表或生成产物。PostgreSQL 继续保存权威状态，Redis 只负责低延迟调度、重试、超时和多 Worker 并发。
+
+## Artifact Contract
+
+每个关键 Agent 输出都会写入 `JobArtifact`，Agent 之间通过标准 artifact 类型形成可回放 contract：
+
+- `asset-analysis.v1`：上传素材分析。
+- `game-spec.v1`：游戏规格。
+- `code-bundle.v1`：代码包计划。
+- `review-report.v1`：Reviewer 安全检查报告。
+- `publish-result.v1`：发布到对象存储和数据库后的结果。
+- `cost-report.v1`：token 和成本估算。
+
+`GenerationJob.result` 保留最终摘要，`JobArtifact` 保存阶段产物，便于后续独立重跑某个 Agent、定位失败原因或做版本兼容。
 
 ## Agent 角色
 
@@ -95,7 +114,10 @@ START
 
 当前实现：
 
-- 写入基础检查结果，例如禁止外链脚本、要求 sandbox、限制文件数量。
+- 写入 `review-report.v1`，检查外链脚本、文件上传 API、bundle 文件数量和 sandbox 约束。
+- 通过时进入 Publisher。
+- 失败且重试次数小于 2 时进入 `CoderRevisionAgent`。
+- 重试耗尽后进入 `FallbackCoderAgent`，使用本地安全模板兜底。
 
 生产扩展：
 

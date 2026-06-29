@@ -4,7 +4,7 @@ import { GameEventType, GameStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { remoteGameManifestSchema } from "@/lib/game-manifest";
-import { PlayFrame } from "./PlayFrame";
+import { PlayFrame } from "@/components/PlayFrame";
 
 type PlayPageProps = {
   params: Promise<{

@@ -91,6 +91,9 @@ model Game {
   bundleUrl            String?
   storagePrefix        String?
   playCount            Int             @default(0)
+  likeCount            Int             @default(0)
+  favoriteCount        Int             @default(0)
+  searchText           String?
   currentVersionNumber Int             @default(1)
   authorId             String
   createdByJobId       String?         @unique
@@ -114,6 +117,8 @@ model Game {
   @@index([authorId])
   @@index([parentGameId])
   @@index([status, publishedAt])
+  @@index([status, playCount])
+  @@index([status, likeCount])
 }
 
 model OAuthAccount {
@@ -179,6 +184,7 @@ model GenerationJob {
   parentGame           Game?               @relation("RemixJobs", fields: [parentGameId], references: [id], onDelete: SetNull)
   remixSourceVersion   GameVersion?        @relation("RemixSourceJobs", fields: [remixSourceVersionId], references: [id], onDelete: SetNull)
   logs                 AgentLog[]
+  artifacts            JobArtifact[]
   uploads              UploadedAsset[]
   game                 Game?               @relation("GeneratedGame")
   versions             GameVersion[]       @relation("JobVersions")
@@ -186,6 +192,23 @@ model GenerationJob {
   @@index([userId])
   @@index([parentGameId])
   @@index([status, createdAt])
+}
+
+model JobArtifact {
+  id         String        @id @default(cuid())
+  jobId      String
+  type       String
+  version    Int           @default(1)
+  payload    Json?
+  storageKey String?
+  publicUrl  String?
+  sha256     String?
+  createdAt  DateTime      @default(now())
+  job        GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, type, version])
+  @@index([jobId, type])
+  @@index([type, createdAt])
 }
 
 model GameVersion {

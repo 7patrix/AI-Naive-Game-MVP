@@ -26,14 +26,34 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   });
 
   if (existing) {
-    await db.gameFavorite.delete({ where: { id: existing.id } });
+    await db.$transaction([
+      db.gameFavorite.delete({ where: { id: existing.id } }),
+      db.game.update({
+        where: { id },
+        data: {
+          favoriteCount: {
+            decrement: 1
+          }
+        }
+      })
+    ]);
   } else {
-    await db.gameFavorite.create({
-      data: {
-        userId: user.id,
-        gameId: id
-      }
-    });
+    await db.$transaction([
+      db.gameFavorite.create({
+        data: {
+          userId: user.id,
+          gameId: id
+        }
+      }),
+      db.game.update({
+        where: { id },
+        data: {
+          favoriteCount: {
+            increment: 1
+          }
+        }
+      })
+    ]);
   }
 
   const referer = request.headers.get("referer") ?? "/";

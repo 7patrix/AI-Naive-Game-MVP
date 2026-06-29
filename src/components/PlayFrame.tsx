@@ -8,6 +8,9 @@ type PlayFrameProps = {
   entryUrl: string;
   manifestUrl: string | null;
   permissions: string[];
+  height?: number | string;
+  compact?: boolean;
+  reportTelemetry?: boolean;
 };
 
 type LoadState = "idle" | "loading" | "loaded" | "timeout" | "error";
@@ -27,12 +30,22 @@ async function reportPlayEvent(gameId: string, type: "PLAY_LOADED" | "PLAY_ERROR
   }
 }
 
-export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }: PlayFrameProps) {
+export function PlayFrame({
+  gameId,
+  title,
+  entryUrl,
+  manifestUrl,
+  permissions,
+  height = 640,
+  compact = false,
+  reportTelemetry = true
+}: PlayFrameProps) {
   const [state, setState] = useState<LoadState>("idle");
   const [runId, setRunId] = useState(0);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const startedAt = useRef<number>(0);
   const hasReported = useRef(false);
+  const frameHeight = typeof height === "number" ? `${height}px` : height;
 
   useEffect(() => {
     if (state !== "loading") {
@@ -43,18 +56,21 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
       setState((current) => {
         if (current !== "loading") return current;
 
-        void reportPlayEvent(gameId, "PLAY_ERROR", {
-          manifestUrl,
-          entryUrl,
-          reason: "iframe_load_timeout",
-          durationMs: Date.now() - startedAt.current
-        });
+        if (reportTelemetry) {
+          void reportPlayEvent(gameId, "PLAY_ERROR", {
+            manifestUrl,
+            entryUrl,
+            reason: "iframe_load_timeout",
+            durationMs: Date.now() - startedAt.current
+          });
+        }
+
         return "timeout";
       });
     }, 12000);
 
     return () => window.clearTimeout(timeout);
-  }, [entryUrl, gameId, manifestUrl, runId, state]);
+  }, [entryUrl, gameId, manifestUrl, reportTelemetry, runId, state]);
 
   useEffect(() => {
     if (state !== "loaded") {
@@ -107,21 +123,27 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
     }
 
     hasReported.current = true;
-    void reportPlayEvent(gameId, "PLAY_LOADED", {
-      manifestUrl,
-      entryUrl,
-      durationMs
-    });
+
+    if (reportTelemetry) {
+      void reportPlayEvent(gameId, "PLAY_LOADED", {
+        manifestUrl,
+        entryUrl,
+        durationMs
+      });
+    }
   }
 
   function handleError() {
     setState("error");
-    void reportPlayEvent(gameId, "PLAY_ERROR", {
-      manifestUrl,
-      entryUrl,
-      reason: "iframe_error",
-      durationMs: Date.now() - startedAt.current
-    });
+
+    if (reportTelemetry) {
+      void reportPlayEvent(gameId, "PLAY_ERROR", {
+        manifestUrl,
+        entryUrl,
+        reason: "iframe_error",
+        durationMs: Date.now() - startedAt.current
+      });
+    }
   }
 
   const showOverlay = state !== "loaded";
@@ -132,7 +154,7 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
       <div className="flex flex-col gap-2 border-b border-white/10 px-5 py-3 text-sm text-slate-200 md:flex-row md:items-center md:justify-between">
         <span>{title}</span>
         <div className="flex items-center gap-3">
-          <span>权限：{permissions.join("、")}</span>
+          {!compact ? <span>权限：{permissions.join("、")}</span> : null}
           {state === "loaded" ? (
             <button
               className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold text-white hover:bg-white/10"
@@ -153,14 +175,18 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
               ) : null}
               <h2 className="mt-5 text-lg font-semibold">
                 {state === "idle"
-                  ? "准备开始游戏"
+                  ? compact
+                    ? "预览已就绪"
+                    : "准备开始游戏"
                   : state === "loading"
                     ? "正在加载远端游戏"
                     : "远端游戏加载较慢"}
               </h2>
               <p className="mt-2 max-w-md text-sm leading-6 text-slate-300">
                 {state === "idle"
-                  ? "点击开始后才会挂载 iframe，避免游戏在你准备操作前自动开局。"
+                  ? compact
+                    ? "点击后在右侧预览 iframe 中运行当前生成结果。"
+                    : "点击开始后才会挂载 iframe，避免游戏在你准备操作前自动开局。"
                   : state === "loading"
                     ? "正在从对象存储加载 iframe 入口，加载完成后会自动进入游戏。"
                     : "iframe 还没有完成加载，可以重新开始，或返回详情页检查 Manifest / Bundle 地址。"}
@@ -171,7 +197,7 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
                   onClick={startGame}
                   type="button"
                 >
-                  {state === "idle" ? "开始游戏" : "重新加载游戏"}
+                  {state === "idle" ? (compact ? "打开预览" : "开始游戏") : "重新加载游戏"}
                 </button>
               ) : null}
             </div>
@@ -179,7 +205,7 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
         ) : null}
         {shouldRenderFrame ? (
           <iframe
-            className="h-[640px] w-full bg-slate-950"
+            className="w-full bg-slate-950"
             key={runId}
             loading="eager"
             onError={handleError}
@@ -188,11 +214,12 @@ export function PlayFrame({ gameId, title, entryUrl, manifestUrl, permissions }:
             referrerPolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin allow-pointer-lock"
             src={entryUrl}
+            style={{ height: frameHeight }}
             tabIndex={0}
             title={title}
           />
         ) : (
-          <div className="h-[640px] w-full bg-slate-950" />
+          <div className="w-full bg-slate-950" style={{ height: frameHeight }} />
         )}
       </div>
     </section>

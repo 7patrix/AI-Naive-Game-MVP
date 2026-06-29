@@ -26,14 +26,34 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   });
 
   if (existing) {
-    await db.gameLike.delete({ where: { id: existing.id } });
+    await db.$transaction([
+      db.gameLike.delete({ where: { id: existing.id } }),
+      db.game.update({
+        where: { id },
+        data: {
+          likeCount: {
+            decrement: 1
+          }
+        }
+      })
+    ]);
   } else {
-    await db.gameLike.create({
-      data: {
-        userId: user.id,
-        gameId: id
-      }
-    });
+    await db.$transaction([
+      db.gameLike.create({
+        data: {
+          userId: user.id,
+          gameId: id
+        }
+      }),
+      db.game.update({
+        where: { id },
+        data: {
+          likeCount: {
+            increment: 1
+          }
+        }
+      })
+    ]);
   }
 
   const referer = request.headers.get("referer") ?? "/";

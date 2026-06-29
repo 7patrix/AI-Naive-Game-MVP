@@ -13,6 +13,7 @@ Browser
   -> Vercel / Railway Web: Next.js 页面和 API
   -> Railway Worker: npm run worker
   -> Supabase / Neon: PostgreSQL
+  -> Railway Redis / Upstash Redis: BullMQ queue
   -> Cloudflare R2 / AWS S3 / 阿里云 OSS: 对象存储
   -> GPT 5.5 / OpenAI-compatible API: Planner/Coder/Vision
 ```
@@ -22,6 +23,7 @@ Browser
 - Web/API：Vercel 或 Railway
 - Worker：Railway / Render / Fly.io
 - Database：Supabase / Neon / Railway PostgreSQL
+- Queue：Railway Redis / Upstash Redis
 - Object Storage：Cloudflare R2 / AWS S3 / 阿里云 OSS / 腾讯云 COS
 - OAuth：GitHub / Google OAuth App，回调地址改为线上域名
 - Model：飞书 GPT 5.5 API 或其他 OpenAI-compatible provider
@@ -32,7 +34,7 @@ Next.js Web 服务负责页面和 API，但生成游戏是长任务：
 
 - 调模型可能需要几十秒。
 - 上传 HTML、Manifest、封面和素材需要访问对象存储。
-- 任务需要持续轮询 `GenerationJob`。
+- 任务需要一个长期运行的 BullMQ consumer 来处理 Redis 队列。
 
 因此线上需要一个长期运行的 Worker 进程：
 
@@ -40,7 +42,7 @@ Next.js Web 服务负责页面和 API，但生成游戏是长任务：
 npm run worker
 ```
 
-如果只部署 Web，不部署 Worker，Create 任务会一直停在 `PENDING / 0%`。
+如果只部署 Web，不部署 Worker，Create 任务会入队但不会被消费，页面会一直停在 `PENDING / 0%`。
 
 ## 环境变量
 
@@ -73,6 +75,14 @@ npm run db:seed
 ```
 
 生产环境应使用 `prisma migrate deploy`，不要使用交互式的 `prisma migrate dev`。
+
+### Redis / BullMQ
+
+```env
+REDIS_URL="redis://USER:PASSWORD@HOST:PORT"
+```
+
+本地 `docker-compose.yml` 已包含 Redis。线上推荐 Railway Redis 或 Upstash Redis。队列 payload 只包含 `jobId`，数据库仍然是任务状态和结果的权威来源。
 
 ### Object Storage
 
@@ -201,6 +211,7 @@ npm run worker
 Worker 需要和 Web 使用同一组环境变量，尤其是：
 
 - `DATABASE_URL`
+- `REDIS_URL`
 - `S3_*`
 - `OPENAI_*`
 - `MODEL_WIRE_API`
@@ -234,12 +245,13 @@ https://your-demo-domain.com/api/auth/google/callback
 
 按顺序验证：
 
-1. 打开首页，能看到 seed 游戏。
-2. 邮箱注册 / 登录。
-3. GitHub OAuth 或 Google OAuth。
-4. 进入 Create，提交 prompt 和图片。
-5. Worker 处理任务，任务从 `PENDING` 到 `SUCCEEDED`。
-6. MinIO/R2/S3 中出现：
+1. 访问 `/api/health`，确认 database 和 redis 都是 `ok`。
+2. 打开首页，能看到 seed 游戏。
+3. 邮箱注册 / 登录。
+4. GitHub OAuth 或 Google OAuth。
+5. 进入 Create，提交 prompt 和图片。
+6. Worker 处理任务，任务从 `PENDING` 到 `SUCCEEDED`。
+7. MinIO/R2/S3 中出现：
 
 ```text
 uploads/{userId}/{jobId}/...
@@ -248,9 +260,9 @@ games/{jobId}/v1/manifest.json
 games/{jobId}/v1/cover.svg
 ```
 
-7. 首页出现新游戏。
-8. Play 页面动态加载远端 manifest 和 HTML。
-9. 管理后台可查看游戏、举报、任务和审计日志。
+8. 首页出现新游戏。
+9. Play 页面动态加载远端 manifest 和 HTML。
+10. 管理后台可查看游戏、举报、任务和审计日志。
 
 ## 备选方案：单台云服务器 + Docker Compose
 
@@ -261,6 +273,7 @@ games/{jobId}/v1/cover.svg
 - Node.js
 - Docker / Docker Compose
 - PostgreSQL 容器
+- Redis 容器
 - MinIO 容器
 - Next.js Web
 - Worker

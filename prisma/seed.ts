@@ -16,6 +16,10 @@ type SeedGame = {
   source: "basic" | "generated";
 };
 
+function buildSearchText(game: SeedGame) {
+  return [game.title, game.description, ...game.tags].join(" ").toLowerCase();
+}
+
 function generateBasicHtml(game: SeedGame) {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -385,6 +389,7 @@ async function main() {
         bundleUrl: uploaded.bundleUrl,
         storagePrefix: uploaded.storagePrefix,
         status: GameStatus.PUBLISHED,
+        searchText: buildSearchText(game),
         currentVersionNumber: 1,
         createdByJobId,
         publishedAt: new Date()
@@ -399,6 +404,7 @@ async function main() {
         bundleUrl: uploaded.bundleUrl,
         storagePrefix: uploaded.storagePrefix,
         status: GameStatus.PUBLISHED,
+        searchText: buildSearchText(game),
         currentVersionNumber: 1,
         publishedAt: new Date(),
         authorId: user.id,

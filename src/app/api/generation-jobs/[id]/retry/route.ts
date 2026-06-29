@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GenerationJobStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { enqueueGenerationJob } from "@/lib/queue";
 
 type RouteContext = {
   params: Promise<{
@@ -47,6 +48,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       }
     }
   });
+
+  await enqueueGenerationJob(job.id);
 
   return NextResponse.redirect(new URL(`/create?job=${job.id}`, request.url), { status: 303 });
 }
