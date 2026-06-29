@@ -24,7 +24,7 @@ type GitHubEmail = {
 };
 
 function redirectWithError(request: NextRequest, error: string) {
-  const url = new URL("/login", request.url);
+  const url = new URL("/login", env.APP_URL);
   url.searchParams.set("error", error);
   return NextResponse.redirect(url, { status: 303 });
 }
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
 
   if (existingAccount) {
     await createSession(existingAccount.userId);
-    return NextResponse.redirect(new URL(nextPath, request.url), { status: 303 });
+    return NextResponse.redirect(new URL(nextPath, env.APP_URL), { status: 303 });
   }
 
   const existingUser = await db.user.findUnique({
@@ -144,5 +144,5 @@ export async function GET(request: NextRequest) {
 
   await createSession(user.id);
 
-  return NextResponse.redirect(new URL(nextPath, request.url), { status: 303 });
+  return NextResponse.redirect(new URL(nextPath, env.APP_URL), { status: 303 });
 }

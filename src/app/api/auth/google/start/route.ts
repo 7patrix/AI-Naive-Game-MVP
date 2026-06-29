@@ -17,7 +17,7 @@ function getSafeNextPath(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   if (!env.GOOGLE_CLIENT_ID) {
-    const url = new URL("/login", request.url);
+    const url = new URL("/login", env.APP_URL);
     url.searchParams.set("error", "Google OAuth 尚未配置，请先使用邮箱登录。");
     return NextResponse.redirect(url);
   }

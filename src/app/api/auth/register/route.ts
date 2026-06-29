@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createSession, hashPassword } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -10,7 +11,7 @@ const registerSchema = z.object({
 });
 
 function redirectWithError(request: NextRequest, error: string) {
-  const url = new URL("/register", request.url);
+  const url = new URL("/register", env.APP_URL);
   url.searchParams.set("error", error);
   return NextResponse.redirect(url, { status: 303 });
 }
@@ -44,5 +45,5 @@ export async function POST(request: NextRequest) {
 
   await createSession(user.id);
 
-  return NextResponse.redirect(new URL("/create", request.url), { status: 303 });
+  return NextResponse.redirect(new URL("/create", env.APP_URL), { status: 303 });
 }
