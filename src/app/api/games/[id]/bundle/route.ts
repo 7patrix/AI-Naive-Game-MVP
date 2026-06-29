@@ -34,7 +34,26 @@ export async function GET(_request: Request, { params }: GameBundleRouteProps) {
     );
   }
 
-  const html = await response.text();
+  const sourceHtml = await response.text();
+  const runtimeStyle = `<style id="ai-arcade-runtime-fit">
+html, body {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+body {
+  position: relative !important;
+}
+canvas {
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+</style>`;
+  const html = sourceHtml.includes("</head>")
+    ? sourceHtml.replace("</head>", `${runtimeStyle}</head>`)
+    : `${runtimeStyle}${sourceHtml}`;
 
   return new NextResponse(html, {
     headers: {

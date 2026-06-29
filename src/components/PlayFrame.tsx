@@ -36,7 +36,7 @@ export function PlayFrame({
   entryUrl,
   manifestUrl,
   permissions,
-  height = 640,
+  height = "min(78vh, 760px)",
   compact = false,
   reportTelemetry = true
 }: PlayFrameProps) {
@@ -213,6 +213,7 @@ export function PlayFrame({
             ref={frameRef}
             referrerPolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin allow-pointer-lock"
+            scrolling="no"
             src={entryUrl}
             style={{ height: frameHeight }}
             tabIndex={0}
