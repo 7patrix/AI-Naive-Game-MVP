@@ -45,17 +45,44 @@ html, body {
 }
 body {
   position: relative !important;
-}
-canvas {
-  max-width: 100% !important;
-  max-height: 100% !important;
+  transform-origin: top left !important;
 }
 </style>`;
+  const runtimeScript = `<script id="ai-arcade-runtime-fit-script">
+(function () {
+  function fitGameToViewport() {
+    var body = document.body;
+    if (!body) return;
+
+    body.style.transform = "none";
+    body.style.width = "";
+    body.style.height = "";
+
+    var viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    var contentWidth = Math.max(body.scrollWidth, document.documentElement.scrollWidth, viewportWidth);
+    var contentHeight = Math.max(body.scrollHeight, document.documentElement.scrollHeight, viewportHeight);
+    var scale = Math.min(viewportWidth / contentWidth, viewportHeight / contentHeight, 1);
+
+    body.style.width = contentWidth + "px";
+    body.style.height = contentHeight + "px";
+    body.style.transform = "scale(" + scale + ")";
+  }
+
+  window.addEventListener("load", fitGameToViewport);
+  window.addEventListener("resize", fitGameToViewport);
+  window.setTimeout(fitGameToViewport, 50);
+  window.setTimeout(fitGameToViewport, 300);
+})();
+</script>`;
   const html = sourceHtml.includes("</head>")
     ? sourceHtml.replace("</head>", `${runtimeStyle}</head>`)
     : `${runtimeStyle}${sourceHtml}`;
+  const htmlWithRuntime = html.includes("</body>")
+    ? html.replace("</body>", `${runtimeScript}</body>`)
+    : `${html}${runtimeScript}`;
 
-  return new NextResponse(html, {
+  return new NextResponse(htmlWithRuntime, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
