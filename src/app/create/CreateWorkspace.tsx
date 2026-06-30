@@ -11,6 +11,12 @@ type RemixSource = {
   description: string;
   currentVersionNumber: number;
 } | null;
+type ApiCredentialOption = {
+  id: string;
+  name: string;
+  modelName: string;
+  apiKeyLast4: string;
+};
 
 type CreateWorkspaceProps = {
   userEmail: string;
@@ -18,13 +24,21 @@ type CreateWorkspaceProps = {
   selectedJobId: string | null;
   error: string | null;
   remixSource: RemixSource;
+  apiCredentials: ApiCredentialOption[];
 };
 
 function isActiveJob(job: CreateJob) {
   return job.status === "PENDING" || job.status === "RUNNING";
 }
 
-export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, remixSource }: CreateWorkspaceProps) {
+export function CreateWorkspace({
+  userEmail,
+  initialJobs,
+  selectedJobId,
+  error,
+  remixSource,
+  apiCredentials
+}: CreateWorkspaceProps) {
   const [jobs, setJobs] = useState(initialJobs);
   const [activeJobId, setActiveJobId] = useState(
     selectedJobId ?? initialJobs.find(isActiveJob)?.id ?? initialJobs[0]?.id ?? null
@@ -79,6 +93,9 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
           <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
             当前登录账号：<span className="font-semibold">{userEmail}</span>。这里创建的生成任务会绑定到该账号。
           </div>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            你可以为本次生成选择平台额度，或使用自己在 API 管理里测试通过的 API 配置。
+          </div>
           {remixSource ? (
             <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-800">
               正在 Remix：<span className="font-semibold">{remixSource.title}</span> v
@@ -87,6 +104,22 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
           ) : null}
           <form action="/api/generation-jobs" className="mt-6 space-y-4" encType="multipart/form-data" method="post">
             {remixSource ? <input name="remixGameId" type="hidden" value={remixSource.id} /> : null}
+            <label className="block text-sm font-semibold text-slate-700">
+              本次使用额度
+              <select className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" name="apiCredentialId">
+                <option value="platform">平台额度</option>
+                {apiCredentials.map((credential) => (
+                  <option key={credential.id} value={credential.id}>
+                    {credential.name} / {credential.modelName} / ****{credential.apiKeyLast4}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {apiCredentials.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                暂无可用的自带 API。你可以继续使用平台额度，或前往 API 管理添加并测试自己的配置。
+              </p>
+            ) : null}
             <textarea
               className="min-h-40 w-full rounded-xl border border-slate-300 px-4 py-3"
               defaultValue={

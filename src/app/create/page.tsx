@@ -1,3 +1,4 @@
+import { ApiCredentialTestStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -125,9 +126,26 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     : null;
 
   const jobs = await getJobs(user.id);
+  const apiCredentials = await db.userApiCredential.findMany({
+    where: {
+      userId: user.id,
+      isEnabled: true,
+      lastTestStatus: ApiCredentialTestStatus.SUCCEEDED
+    },
+    select: {
+      id: true,
+      name: true,
+      modelName: true,
+      apiKeyLast4: true
+    },
+    orderBy: {
+      updatedAt: "desc"
+    }
+  });
 
   return (
     <CreateWorkspace
+      apiCredentials={apiCredentials}
       error={params.error ?? null}
       initialJobs={jobs.map(serializeJob)}
       remixSource={remixSource}

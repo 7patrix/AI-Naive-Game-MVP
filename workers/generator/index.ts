@@ -111,6 +111,10 @@ function hashArtifactPayload(payload: unknown) {
 
 function getJobModelConfig(job: Job): JobModelConfig {
   if (!job.apiCredential) {
+    if (job.apiCredentialSource === ApiCredentialSource.USER_KEY) {
+      throw new Error("你的自带 API 配置不存在或已被删除，请重新选择 API 配置后再创建任务。");
+    }
+
     return null;
   }
 
@@ -122,6 +126,14 @@ function getJobModelConfig(job: Job): JobModelConfig {
     modelName: job.apiCredential.modelName,
     wireApi
   };
+}
+
+function shouldFailOnModelError(job: Job) {
+  return job.apiCredentialSource === ApiCredentialSource.USER_KEY;
+}
+
+function buildUserKeyFailureMessage(message: string) {
+  return `你的自带 API 配置调用失败，请在 API 管理中重新测试或更新配置。错误：${message}`;
 }
 
 async function writeArtifact(jobId: string, type: string, payload: unknown, storageKey?: string, publicUrl?: string) {
@@ -939,9 +951,14 @@ async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[], modelCo
       );
       source = "llm";
     } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
       await addLog(job.id, "PlannerAgent", "llm_fallback", "模型生成规格失败，已回退到本地规格生成器。", {
-        error: error instanceof Error ? error.message : "unknown"
+        error: message
       });
+
+      if (shouldFailOnModelError(job)) {
+        throw new Error(buildUserKeyFailureMessage(message));
+      }
     }
   }
 
@@ -986,9 +1003,14 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
         }
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown";
       await addLog(job.id, "CoderAgent", "llm_fallback", "模型生成代码失败，已回退到本地 HTML 生成器。", {
-        error: error instanceof Error ? error.message : "unknown"
+        error: message
       });
+
+      if (shouldFailOnModelError(job)) {
+        throw new Error(buildUserKeyFailureMessage(message));
+      }
     }
   }
 
@@ -1363,7 +1385,11 @@ async function runClaimedJob(job: Job) {
       }
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "未知错误";
+    const rawMessage = error instanceof Error ? error.message : "未知错误";
+    const message =
+      job.apiCredentialSource === ApiCredentialSource.USER_KEY && !rawMessage.startsWith("你的自带 API")
+        ? buildUserKeyFailureMessage(rawMessage)
+        : rawMessage;
 
     await prisma.generationJob.update({
       where: {

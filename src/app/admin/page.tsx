@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { GameReportStatus, GameStatus, GenerationJobStatus } from "@prisma/client";
+import { ApiCredentialSource, GameReportStatus, GameStatus, GenerationJobStatus } from "@prisma/client";
 import { requireAdminUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -32,7 +32,7 @@ export default async function AdminPage() {
     redirect("/login?next=/admin");
   }
 
-  const [games, reports, jobs, audits, counts] = await Promise.all([
+  const [games, reports, jobs, audits, usageJobs, counts] = await Promise.all([
     db.game.findMany({
       include: {
         author: { select: { email: true, name: true } },
@@ -65,6 +65,16 @@ export default async function AdminPage() {
       orderBy: { createdAt: "desc" },
       take: 12
     }),
+    db.generationJob.findMany({
+      select: {
+        userId: true,
+        apiCredentialSource: true,
+        estimatedCostCents: true,
+        user: { select: { email: true, name: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200
+    }),
     Promise.all([
       db.game.count({ where: { status: GameStatus.PUBLISHED } }),
       db.game.count({ where: { status: GameStatus.ARCHIVED } }),
@@ -73,6 +83,29 @@ export default async function AdminPage() {
     ])
   ]);
   const [publishedCount, archivedCount, openReportCount, failedJobCount] = counts;
+  const usageByUser = Array.from(
+    usageJobs.reduce((map, job) => {
+      const current = map.get(job.userId) ?? {
+        userLabel: job.user.name ?? job.user.email,
+        platformJobs: 0,
+        userKeyJobs: 0,
+        estimatedCostCents: 0
+      };
+
+      if (job.apiCredentialSource === ApiCredentialSource.USER_KEY) {
+        current.userKeyJobs += 1;
+      } else {
+        current.platformJobs += 1;
+      }
+
+      current.estimatedCostCents += job.estimatedCostCents;
+      map.set(job.userId, current);
+      return map;
+    }, new Map<string, { userLabel: string; platformJobs: number; userKeyJobs: number; estimatedCostCents: number }>())
+  )
+    .map(([userId, usage]) => ({ userId, ...usage }))
+    .sort((left, right) => right.estimatedCostCents - left.estimatedCostCents)
+    .slice(0, 8);
 
   return (
     <div className="space-y-8">
@@ -220,9 +253,10 @@ export default async function AdminPage() {
                 <p className="mt-1 text-xs text-slate-500">
                   额度来源：
                   {job.apiCredentialSource === "USER_KEY"
-                    ? `用户自带 API${job.apiCredential ? `（${job.apiCredential.name} / ****${job.apiCredential.apiKeyLast4}）` : ""}`
+                    ? `用户自带 API（${job.apiCredentialNameSnapshot ?? job.apiCredential?.name ?? "已删除配置"} / ${job.apiCredentialModelSnapshot ?? "未知模型"}${job.apiCredential ? ` / ****${job.apiCredential.apiKeyLast4}` : ""}）`
                     : "平台额度"}
                 </p>
+                {job.error ? <p className="mt-1 line-clamp-2 text-xs text-red-600">错误：{job.error}</p> : null}
                 {job.game ? (
                   <Link className="mt-2 inline-flex text-xs font-semibold text-indigo-700" href={`/games/${job.game.slug}`}>
                     查看产物：{job.game.title}
@@ -245,6 +279,42 @@ export default async function AdminPage() {
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-950">用户用量概览</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          最近 200 个任务的来源和估算成本，用于观察平台额度消耗和自带 API 使用情况。
+        </p>
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="border-b border-slate-200 py-3">用户</th>
+                <th className="border-b border-slate-200 py-3">平台额度任务</th>
+                <th className="border-b border-slate-200 py-3">自带 API 任务</th>
+                <th className="border-b border-slate-200 py-3">估算成本</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usageByUser.map((usage) => (
+                <tr key={usage.userId}>
+                  <td className="border-b border-slate-100 py-4 font-medium text-slate-900">{usage.userLabel}</td>
+                  <td className="border-b border-slate-100 py-4 text-slate-600">{usage.platformJobs}</td>
+                  <td className="border-b border-slate-100 py-4 text-slate-600">{usage.userKeyJobs}</td>
+                  <td className="border-b border-slate-100 py-4 text-slate-600">
+                    {(usage.estimatedCostCents / 100).toFixed(2)} USD
+                  </td>
+                </tr>
+              ))}
+              {usageByUser.length === 0 ? (
+                <tr>
+                  <td className="py-4 text-slate-500" colSpan={4}>暂无用量记录。</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </section>
 

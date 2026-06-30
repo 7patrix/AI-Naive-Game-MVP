@@ -9,6 +9,7 @@ type ApiKeysPageProps = {
   searchParams: Promise<{
     error?: string;
     saved?: string;
+    tested?: string;
   }>;
 };
 
@@ -96,6 +97,16 @@ export default async function ApiKeysPage({ searchParams }: ApiKeysPageProps) {
           API 配置已保存。
         </div>
       ) : null}
+      {params.tested === "success" ? (
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
+          API 连接测试成功，可以用于生成任务。
+        </div>
+      ) : null}
+      {params.tested === "failed" ? (
+        <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-700">
+          API 连接测试失败，请检查 key、Base URL、模型名称和协议类型。
+        </div>
+      ) : null}
       {params.error ? (
         <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-700">
           {errorMessages[params.error] ?? "操作失败，请稍后重试。"}
@@ -131,6 +142,28 @@ export default async function ApiKeysPage({ searchParams }: ApiKeysPageProps) {
                     <p className="mt-2 text-sm text-slate-600">
                       {credential.modelName} / {credential.wireApi} / key 尾号 {credential.apiKeyLast4}
                     </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      测试状态：
+                      <span
+                        className={
+                          credential.lastTestStatus === "SUCCEEDED"
+                            ? "font-semibold text-emerald-700"
+                            : credential.lastTestStatus === "FAILED"
+                              ? "font-semibold text-red-600"
+                              : "font-semibold text-slate-500"
+                        }
+                      >
+                        {credential.lastTestStatus === "SUCCEEDED"
+                          ? "可用"
+                          : credential.lastTestStatus === "FAILED"
+                            ? "失败"
+                            : "未测试"}
+                      </span>
+                      {credential.lastTestedAt ? ` / ${credential.lastTestedAt.toLocaleString("zh-CN")}` : ""}
+                    </p>
+                    {credential.lastTestError ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-red-600">{credential.lastTestError}</p>
+                    ) : null}
                     <p className="mt-1 break-all text-xs text-slate-500">{credential.baseUrl}</p>
                     <p className="mt-2 text-xs text-slate-400">
                       更新于 {credential.updatedAt.toLocaleString("zh-CN")}
@@ -138,6 +171,11 @@ export default async function ApiKeysPage({ searchParams }: ApiKeysPageProps) {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <form action={`/api/account/api-credentials/${credential.id}/test`} method="post">
+                      <button className="rounded-lg border border-indigo-200 px-3 py-2 text-xs font-semibold text-indigo-700" type="submit">
+                        测试连接
+                      </button>
+                    </form>
                     <form action={`/api/account/api-credentials/${credential.id}/toggle`} method="post">
                       <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold" type="submit">
                         {credential.isEnabled ? "禁用" : "启用"}

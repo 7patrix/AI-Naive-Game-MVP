@@ -264,3 +264,48 @@ export async function completeJson<T>(system: string, user: string, config?: Mod
   const json = match?.[1] ?? match?.[0] ?? content;
   return JSON.parse(json) as T;
 }
+
+export async function testModelConfig(config: ModelClientConfig) {
+  if (config.wireApi === "responses") {
+    const response = await outboundFetch(`${config.baseUrl.replace(/\/$/, "")}/responses`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.modelName,
+        input: "Reply with OK."
+      })
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Responses API 测试失败：${response.status}${detail ? ` ${detail.slice(0, 160)}` : ""}`);
+    }
+
+    return;
+  }
+
+  const response = await outboundFetch(`${config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: config.modelName,
+      messages: [
+        {
+          role: "user",
+          content: "Reply with OK."
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Chat Completions 测试失败：${response.status}${detail ? ` ${detail.slice(0, 160)}` : ""}`);
+  }
+}

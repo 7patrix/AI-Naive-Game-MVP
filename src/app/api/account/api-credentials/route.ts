@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ApiCredentialProvider } from "@prisma/client";
+import { ApiCredentialProvider, ApiCredentialTestStatus } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { encryptApiKey, getApiKeyLast4 } from "@/lib/api-credential-crypto";
@@ -62,6 +62,9 @@ export async function POST(request: NextRequest) {
           baseUrl: parsed.data.baseUrl,
           modelName: parsed.data.modelName,
           wireApi: parsed.data.wireApi,
+          lastTestedAt: null,
+          lastTestStatus: ApiCredentialTestStatus.UNTESTED,
+          lastTestError: null,
           ...(apiKey
             ? {
                 encryptedApiKey: encryptApiKey(apiKey),

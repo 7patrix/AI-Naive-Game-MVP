@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ApiCredentialSource, GameStatus, GenerationJobStatus, ModerationStatus, UploadedAssetKind } from "@prisma/client";
+import { ApiCredentialSource, ApiCredentialTestStatus, GameStatus, GenerationJobStatus, ModerationStatus, UploadedAssetKind } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { enqueueGenerationJob } from "@/lib/queue";
+import { checkActiveJobQuota, checkPlatformQuota, checkUserKeyQuota } from "@/lib/quota";
 import { uploadObject } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 const createJobSchema = z.object({
   prompt: z.string().trim().min(10, "请至少输入 10 个字符的游戏创意。").max(2000),
-  remixGameId: z.string().trim().min(1).optional()
+  remixGameId: z.string().trim().min(1).optional(),
+  apiCredentialId: z.string().trim().min(1).optional()
 });
 
-const MAX_DAILY_JOBS = 10;
-const MAX_ACTIVE_JOBS = 2;
 const MAX_FILES = 5;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024;
@@ -65,35 +65,18 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const parsed = createJobSchema.safeParse({
     prompt: formData.get("prompt"),
-    remixGameId: formData.get("remixGameId") || undefined
+    remixGameId: formData.get("remixGameId") || undefined,
+    apiCredentialId: formData.get("apiCredentialId") || undefined
   });
 
   if (!parsed.success) {
     return redirectWithError(request, parsed.error.issues[0]?.message ?? "请输入有效的游戏创意。");
   }
 
-  const activeJobs = await db.generationJob.count({
-    where: {
-      userId: user.id,
-      status: { in: [GenerationJobStatus.PENDING, GenerationJobStatus.RUNNING] }
-    }
-  });
+  const activeQuota = await checkActiveJobQuota(user.id);
 
-  if (activeJobs >= MAX_ACTIVE_JOBS) {
-    return redirectWithError(request, `资源限额：最多同时运行 ${MAX_ACTIVE_JOBS} 个生成任务。`);
-  }
-
-  const jobsToday = await db.generationJob.count({
-    where: {
-      userId: user.id,
-      createdAt: {
-        gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
-      }
-    }
-  });
-
-  if (jobsToday >= MAX_DAILY_JOBS) {
-    return redirectWithError(request, `资源限额：每个账号 24 小时最多创建 ${MAX_DAILY_JOBS} 个任务。`);
+  if (!activeQuota.ok) {
+    return redirectWithError(request, activeQuota.error ?? "当前生成任务过多，请稍后再试。");
   }
 
   const files = formData
@@ -134,24 +117,46 @@ export async function POST(request: NextRequest) {
 
   const moderationReport = moderatePrompt(parsed.data.prompt);
   const isRejected = moderationReport.status === ModerationStatus.REJECTED;
-  const apiCredential = await db.userApiCredential.findFirst({
-    where: {
-      userId: user.id,
-      isEnabled: true
-    },
-    orderBy: {
-      updatedAt: "desc"
-    },
-    select: {
-      id: true
-    }
-  });
+  const requestedCredentialId =
+    parsed.data.apiCredentialId && parsed.data.apiCredentialId !== "platform"
+      ? parsed.data.apiCredentialId
+      : null;
+  const apiCredential = requestedCredentialId
+    ? await db.userApiCredential.findFirst({
+        where: {
+          id: requestedCredentialId,
+          userId: user.id,
+          isEnabled: true,
+          lastTestStatus: ApiCredentialTestStatus.SUCCEEDED
+        },
+        select: {
+          id: true,
+          name: true,
+          modelName: true
+        }
+      })
+    : null;
+
+  if (requestedCredentialId && !apiCredential) {
+    return redirectWithError(request, "这条 API 配置不可用，请先在 API 管理中测试成功后再使用。");
+  }
+  const source = apiCredential ? ApiCredentialSource.USER_KEY : ApiCredentialSource.PLATFORM;
+  const quota = source === ApiCredentialSource.USER_KEY
+    ? await checkUserKeyQuota(user.id)
+    : await checkPlatformQuota(user.id);
+
+  if (!quota.ok) {
+    return redirectWithError(request, quota.error ?? "当前额度不足，请稍后再试。");
+  }
+
   const job = await db.generationJob.create({
     data: {
       prompt: parsed.data.prompt,
       userId: user.id,
-      apiCredentialSource: apiCredential ? ApiCredentialSource.USER_KEY : ApiCredentialSource.PLATFORM,
+      apiCredentialSource: source,
       apiCredentialId: apiCredential?.id,
+      apiCredentialNameSnapshot: apiCredential?.name,
+      apiCredentialModelSnapshot: apiCredential?.modelName,
       status: isRejected ? GenerationJobStatus.FAILED : GenerationJobStatus.PENDING,
       progress: isRejected ? 100 : 0,
       error: isRejected ? "内容审核未通过，请调整创意描述后重试。" : null,

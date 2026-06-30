@@ -55,6 +55,12 @@ enum ApiCredentialSource {
   USER_KEY
 }
 
+enum ApiCredentialTestStatus {
+  UNTESTED
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id              String          @id @default(cuid())
   email           String          @unique
@@ -62,6 +68,8 @@ model User {
   passwordHash    String
   emailVerifiedAt DateTime?
   avatarUrl       String?
+  platformDailyJobLimit       Int             @default(2)
+  platformDailyCostLimitCents Int             @default(100)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   games           Game[]
@@ -90,6 +98,9 @@ model UserApiCredential {
   encryptedApiKey String
   apiKeyLast4     String
   isEnabled       Boolean               @default(true)
+  lastTestedAt    DateTime?
+  lastTestStatus  ApiCredentialTestStatus @default(UNTESTED)
+  lastTestError   String?
   lastUsedAt      DateTime?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -222,6 +233,8 @@ model GenerationJob {
   modelOutputTokens    Int                 @default(0)
   apiCredentialSource  ApiCredentialSource @default(PLATFORM)
   apiCredentialId      String?
+  apiCredentialNameSnapshot  String?
+  apiCredentialModelSnapshot String?
   userId               String
   parentGameId         String?
   remixSourceVersionId String?
