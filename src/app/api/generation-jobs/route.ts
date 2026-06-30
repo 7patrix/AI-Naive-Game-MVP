@@ -28,6 +28,12 @@ function getAssetKind(contentType: string) {
   return UploadedAssetKind.OTHER;
 }
 
+function getSafeUploadKey(userId: string, jobId: string, file: File, index: number) {
+  const extension = file.name.match(/\.([a-zA-Z0-9]{1,12})$/)?.[1]?.toLowerCase();
+  const suffix = extension ? `.${extension}` : "";
+  return `uploads/${userId}/${jobId}/${Date.now()}-${index}${suffix}`;
+}
+
 function redirectWithError(request: NextRequest, error: string) {
   const url = new URL("/create", request.url);
   url.searchParams.set("error", error);
@@ -195,35 +201,61 @@ export async function POST(request: NextRequest) {
 
   const uploadedAssets = [];
 
-  for (const file of files) {
-    const bytes = await file.arrayBuffer();
-    const storageKey = `uploads/${user.id}/${job.id}/${Date.now()}-${file.name}`;
-    const uploaded = await uploadObject({
-      key: storageKey,
-      body: Buffer.from(bytes),
-      contentType: file.type || "application/octet-stream"
-    });
+  try {
+    for (const [index, file] of files.entries()) {
+      const bytes = await file.arrayBuffer();
+      const storageKey = getSafeUploadKey(user.id, job.id, file, index);
+      const uploaded = await uploadObject({
+        key: storageKey,
+        body: Buffer.from(bytes),
+        contentType: file.type || "application/octet-stream"
+      });
 
-    const asset = await db.uploadedAsset.create({
+      const asset = await db.uploadedAsset.create({
+        data: {
+          ownerId: user.id,
+          jobId: job.id,
+          kind: getAssetKind(file.type),
+          filename: file.name,
+          contentType: file.type || "application/octet-stream",
+          sizeBytes: file.size,
+          storageKey: uploaded.key,
+          publicUrl: uploaded.url
+        }
+      });
+
+      uploadedAssets.push({
+        id: asset.id,
+        filename: asset.filename,
+        contentType: asset.contentType,
+        sizeBytes: asset.sizeBytes,
+        publicUrl: asset.publicUrl
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "上传素材失败。";
+
+    await db.generationJob.update({
+      where: { id: job.id },
       data: {
-        ownerId: user.id,
-        jobId: job.id,
-        kind: getAssetKind(file.type),
-        filename: file.name,
-        contentType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
-        storageKey: uploaded.key,
-        publicUrl: uploaded.url
+        status: GenerationJobStatus.FAILED,
+        progress: 100,
+        error: "素材上传失败，请重命名文件或稍后重试。",
+        finishedAt: new Date(),
+        logs: {
+          create: {
+            agentName: "UploadAgent",
+            step: "assets_upload_failed",
+            message,
+          }
+        }
       }
     });
 
-    uploadedAssets.push({
-      id: asset.id,
-      filename: asset.filename,
-      contentType: asset.contentType,
-      sizeBytes: asset.sizeBytes,
-      publicUrl: asset.publicUrl
-    });
+    const url = new URL("/create", request.url);
+    url.searchParams.set("job", job.id);
+    url.searchParams.set("error", "素材上传失败，请重命名文件或稍后重试。");
+    return NextResponse.redirect(url, { status: 303 });
   }
 
   if (uploadedAssets.length > 0) {
