@@ -228,6 +228,13 @@ export default async function AdminPage() {
                     </li>
                   ))}
                 </ul>
+                <div className="mt-4">
+                  {job.game ? (
+                    <p className="text-xs text-slate-400">已生成游戏的任务会保留为作品记录。</p>
+                  ) : (
+                    <DeleteJobForm jobId={job.id} />
+                  )}
+                </div>
               </article>
             ))}
           </div>
@@ -307,6 +314,19 @@ function ReportActionForm({
       <input name="status" type="hidden" value={action} />
       <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold" type="submit">
         {label}
+      </button>
+    </form>
+  );
+}
+
+function DeleteJobForm({ jobId }: { jobId: string }) {
+  return (
+    <form action={`/api/admin/jobs/${jobId}`} method="post">
+      <button
+        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+        type="submit"
+      >
+        删除任务
       </button>
     </form>
   );
