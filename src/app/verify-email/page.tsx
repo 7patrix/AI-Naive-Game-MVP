@@ -16,7 +16,7 @@ export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageP
       <h1 className="mt-3 text-3xl font-bold text-slate-950">请查收验证邮件</h1>
       <p className="mt-3 text-sm leading-6 text-slate-600">
         我们已经向{params.email ? ` ${params.email} ` : "你的邮箱"}发送了验证链接。点击邮件中的链接后，
-        你会自动登录并进入 Create 工作台。
+        页面会显示验证结果；验证成功后请回到网站登录。
       </p>
       {params.error ? (
         <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
