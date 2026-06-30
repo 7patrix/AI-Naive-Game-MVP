@@ -52,6 +52,15 @@ type AssetAnalysis = {
     height: number;
   };
   textPreview?: string;
+  textAnalysis?: {
+    documentType: string;
+    gameTypeHints: string[];
+    characters: string[];
+    mechanics: string[];
+    scenes: string[];
+    dialogueSamples: string[];
+    branchHints: string[];
+  };
   visionSummary?: string;
 };
 type BundlePlan = {
@@ -272,6 +281,67 @@ function formatBytes(sizeBytes: number) {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
   if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`;
   return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function uniqueMatches(text: string, patterns: RegExp[], limit = 8) {
+  const values = new Set<string>();
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const value = (match[1] ?? match[0]).trim();
+      if (value) values.add(value.slice(0, 40));
+      if (values.size >= limit) return [...values];
+    }
+  }
+
+  return [...values];
+}
+
+function analyzeTextMaterial(text: string): NonNullable<AssetAnalysis["textAnalysis"]> {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lower = normalized.toLowerCase();
+  const gameTypeHints = [
+    /(galgame|视觉小说|文字冒险|恋爱|好感度|分支|结局)/i.test(normalized) ? "剧情/视觉小说" : "",
+    /(规则|玩法|关卡|得分|胜利|失败|战斗|回合|技能)/i.test(normalized) ? "规则/玩法文档" : "",
+    /(角色|人物|主角|npc|反派|女主|男主)/i.test(normalized) ? "角色设定" : "",
+    /(地图|场景|世界观|背景|章节|校园|城市|森林)/i.test(normalized) ? "世界观/场景设定" : ""
+  ].filter(Boolean);
+  const characters = uniqueMatches(normalized, [
+    /(?:角色|人物|主角|女主|男主|NPC|反派)[:：]\s*([^\n，。；;]+)/gi,
+    /《([^》]{1,20})》/g,
+    /^([^\n：:]{1,12})[：:]/gm
+  ]);
+  const mechanics = uniqueMatches(normalized, [
+    /(?:玩法|规则|机制|系统|操作|胜利条件|失败条件)[:：]\s*([^\n]+)/gi,
+    /(好感度|分支选择|多结局|回合制|收集|解谜|点击|拖拽|躲避|战斗|养成)/gi
+  ]);
+  const scenes = uniqueMatches(normalized, [
+    /(?:场景|地点|地图|章节|关卡)[:：]\s*([^\n]+)/gi,
+    /(校园|教室|天台|街道|森林|城堡|村庄|房间|梦境|海边|车站)/gi
+  ]);
+  const dialogueSamples = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^.{1,18}[：:「“]/.test(line) || /[「“].+[」”]/.test(line))
+    .slice(0, 8)
+    .map((line) => line.slice(0, 120));
+  const branchHints = uniqueMatches(normalized, [
+    /(?:选择|选项|分支|如果|若|结局)[:：]\s*([^\n]+)/gi,
+    /(选项[一二三四1234]|结局[一二三四1234]|bad end|good end|true end)/gi
+  ]);
+  const documentType =
+    gameTypeHints[0] ??
+    (lower.includes("todo") || lower.includes("需求") ? "需求文档" : "文本素材");
+
+  return {
+    documentType,
+    gameTypeHints,
+    characters,
+    mechanics,
+    scenes,
+    dialogueSamples,
+    branchHints
+  };
 }
 
 function buildTitle(prompt: string) {
@@ -935,12 +1005,14 @@ async function analyzeAsset(asset: InputAsset, modelConfig: JobModelConfig): Pro
   if (kind === "text") {
     try {
       const response = await fetch(asset.publicUrl, { cache: "no-store" });
-      const text = (await response.text()).slice(0, 2000);
+      const text = (await response.text()).slice(0, 8000);
+      const textAnalysis = analyzeTextMaterial(text);
 
       return {
         ...base,
         textPreview: text,
-        summary: `用户上传了文本素材《${asset.filename}》，已提取前 ${text.length} 个字符作为参考内容。`
+        textAnalysis,
+        summary: `用户上传了文本素材《${asset.filename}》，已提取前 ${text.length} 个字符作为参考内容。文档类型判断：${textAnalysis.documentType}。`
       };
     } catch {
       return {
@@ -997,8 +1069,11 @@ function buildAssetContext(analyses: AssetAnalysis[]) {
     .map((asset, index) => {
       const dimensions = asset.dimensions ? ` 尺寸：${asset.dimensions.width}x${asset.dimensions.height}。` : "";
       const vision = asset.visionSummary ? ` 视觉摘要：${asset.visionSummary}` : "";
-      const textPreview = asset.textPreview ? ` 文本摘录：${asset.textPreview.slice(0, 600)}` : "";
-      return `${index + 1}. ${asset.summary}${dimensions}${vision} URL：${asset.publicUrl}.${textPreview}`;
+      const textAnalysis = asset.textAnalysis
+        ? ` 文本结构：${JSON.stringify(asset.textAnalysis)}`
+        : "";
+      const textPreview = asset.textPreview ? ` 文本摘录：${asset.textPreview.slice(0, 2000)}` : "";
+      return `${index + 1}. ${asset.summary}${dimensions}${vision}${textAnalysis} URL：${asset.publicUrl}.${textPreview}`;
     })
     .join("\n");
 }
@@ -1041,8 +1116,8 @@ async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[], modelCo
   if (hasModelConfig(modelConfig)) {
     try {
       spec = await completeJson<GameSpec>(
-        "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。",
-        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、图标或 UI 参考。`,
+        "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。若上传素材包含文本/剧本/规则文档，必须优先根据文本里的角色、世界观、玩法规则、场景、台词和分支来设计游戏，而不是只根据用户一句 prompt 发散。",
+        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果文本素材像 galgame、视觉小说、剧情脚本或角色设定，请生成包含对话、选择分支、好感度/结局或章节推进的轻量互动游戏规格。如果文本素材像玩法规则文档，请提炼胜负条件、操作方式、关卡目标和计分规则。如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、剧情台词、关卡规则或 UI 参考。`,
         modelConfig
       );
       source = "llm";
@@ -1082,7 +1157,7 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
     try {
       const html = await completeText(
         "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。必须同时支持桌面端和手机端。必须优先监听 postMessage 的 AI_ARCADE_INPUT 标准协议：kind=move 时用 x/y(-1 到 1) 控制移动；kind=action 且 name=primary 时触发跳跃/射击/确认等主动作；kind=action 且 name=restart 时重开游戏。同时必须兼容旧的 AI_ARCADE_KEY 消息。不要只依赖键盘。",
-        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。游戏内必须显示电脑端和手机端的操作提示，并说明：移动可用键盘/WASD/虚拟摇杆，主动作可用点击/动作按钮，重开可用 R/重开按钮。`,
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果文本素材包含角色、台词、剧情节点、分支或规则，必须把这些内容实际做进游戏：角色名要出现在 UI/对话中，关键台词要以对话框/日志出现，分支要有可点击选项，规则要影响胜负/得分/关卡。若是 galgame/视觉小说，请实现轻量对话系统、选项分支和至少 2 个结局或结果反馈。如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。游戏内必须显示电脑端和手机端的操作提示，并说明：移动可用键盘/WASD/虚拟摇杆，主动作可用点击/动作按钮，重开可用 R/重开按钮。`,
         modelConfig
       );
       if (html.includes("<html") && html.includes("</html>")) {
