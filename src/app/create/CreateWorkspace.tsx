@@ -40,6 +40,7 @@ export function CreateWorkspace({
   apiCredentials
 }: CreateWorkspaceProps) {
   const [jobs, setJobs] = useState(initialJobs);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeJobId, setActiveJobId] = useState(
     selectedJobId ?? initialJobs.find(isActiveJob)?.id ?? initialJobs[0]?.id ?? null
   );
@@ -102,7 +103,13 @@ export function CreateWorkspace({
               {remixSource.currentVersionNumber}。提交后会基于原作品生成新的版本。
             </div>
           ) : null}
-          <form action="/api/generation-jobs" className="mt-6 space-y-4" encType="multipart/form-data" method="post">
+          <form
+            action="/api/generation-jobs"
+            className="mt-6 space-y-4"
+            encType="multipart/form-data"
+            method="post"
+            onSubmit={() => setIsSubmitting(true)}
+          >
             {remixSource ? <input name="remixGameId" type="hidden" value={remixSource.id} /> : null}
             <label className="block text-sm font-semibold text-slate-700">
               本次使用额度
@@ -132,8 +139,12 @@ export function CreateWorkspace({
               required
             />
             <input className="w-full rounded-xl border border-slate-300 px-4 py-3" multiple name="assets" type="file" />
-            <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white" type="submit">
-              创建生成任务
+            <button
+              className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              {isSubmitting ? "正在提交..." : "创建生成任务"}
             </button>
           </form>
         </section>

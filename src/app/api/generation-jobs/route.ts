@@ -18,6 +18,7 @@ const createJobSchema = z.object({
 const MAX_FILES = 5;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_FILE_BYTES = 25 * 1024 * 1024;
+const DUPLICATE_SUBMIT_WINDOW_MS = 30 * 1000;
 const BLOCKED_TERMS = ["赌博", "色情", "仇恨", "自残", "诈骗", "暴恐", "恶意软件"];
 
 function getAssetKind(contentType: string) {
@@ -153,6 +154,38 @@ export async function POST(request: NextRequest) {
 
   if (!quota.ok) {
     return redirectWithError(request, quota.error ?? "当前额度不足，请稍后再试。");
+  }
+
+  const recentJobs = await db.generationJob.findMany({
+    where: {
+      userId: user.id,
+      prompt: parsed.data.prompt,
+      parentGameId: sourceGame?.id ?? null,
+      apiCredentialSource: source,
+      apiCredentialId: apiCredential?.id ?? null,
+      createdAt: {
+        gte: new Date(Date.now() - DUPLICATE_SUBMIT_WINDOW_MS)
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    select: {
+      id: true,
+      inputFiles: true
+    },
+    take: 5
+  });
+  const recentDuplicate = recentJobs.find((job) => {
+    const inputFileCount = Array.isArray(job.inputFiles) ? job.inputFiles.length : 0;
+    return inputFileCount === files.length;
+  });
+
+  if (recentDuplicate) {
+    const url = new URL("/create", request.url);
+    url.searchParams.set("job", recentDuplicate.id);
+    url.searchParams.set("error", "检测到重复提交，已切换到刚创建的任务。");
+    return NextResponse.redirect(url, { status: 303 });
   }
 
   const job = await db.generationJob.create({
