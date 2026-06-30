@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GameReportStatus } from "@prisma/client";
 import { requireAdminUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 
 type AdminReportRouteProps = {
   params: Promise<{
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest, { params }: AdminReportRoutePro
   const admin = await requireAdminUser();
 
   if (!admin) {
-    return NextResponse.redirect(new URL("/login?next=/admin", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/login?next=/admin", env.APP_URL), { status: 303 });
   }
 
   const { id } = await params;
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest, { params }: AdminReportRoutePro
   const status = formData.get("status");
 
   if (status !== GameReportStatus.RESOLVED && status !== GameReportStatus.DISMISSED) {
-    return NextResponse.redirect(new URL("/admin?error=invalid-report-status", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/admin?error=invalid-report-status", env.APP_URL), { status: 303 });
   }
 
   const report = await db.gameReport.update({
@@ -54,5 +55,5 @@ export async function POST(request: NextRequest, { params }: AdminReportRoutePro
     }
   });
 
-  return NextResponse.redirect(new URL("/admin", request.url), { status: 303 });
+  return NextResponse.redirect(new URL("/admin", env.APP_URL), { status: 303 });
 }

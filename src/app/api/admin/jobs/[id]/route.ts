@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { getGenerationQueue } from "@/lib/queue";
 
 type AdminJobRouteProps = {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest, { params }: AdminJobRouteProps)
   const admin = await requireAdminUser();
 
   if (!admin) {
-    return NextResponse.redirect(new URL("/login?next=/admin", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/login?next=/admin", env.APP_URL), { status: 303 });
   }
 
   const { id } = await params;
@@ -49,11 +50,11 @@ export async function POST(request: NextRequest, { params }: AdminJobRouteProps)
   });
 
   if (!job) {
-    return NextResponse.redirect(new URL("/admin?error=job-not-found", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/admin?error=job-not-found", env.APP_URL), { status: 303 });
   }
 
   if (job.game) {
-    return NextResponse.redirect(new URL("/admin?error=job-has-game", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/admin?error=job-has-game", env.APP_URL), { status: 303 });
   }
 
   const removedQueueJobs = await removeQueuedJob(job.id);
@@ -78,5 +79,5 @@ export async function POST(request: NextRequest, { params }: AdminJobRouteProps)
     })
   ]);
 
-  return NextResponse.redirect(new URL("/admin", request.url), { status: 303 });
+  return NextResponse.redirect(new URL("/admin", env.APP_URL), { status: 303 });
 }

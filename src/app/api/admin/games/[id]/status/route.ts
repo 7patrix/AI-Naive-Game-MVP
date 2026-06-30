@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GameStatus } from "@prisma/client";
 import { requireAdminUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 
 type AdminGameStatusRouteProps = {
   params: Promise<{
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest, { params }: AdminGameStatusRout
   const admin = await requireAdminUser();
 
   if (!admin) {
-    return NextResponse.redirect(new URL("/login?next=/admin", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/login?next=/admin", env.APP_URL), { status: 303 });
   }
 
   const { id } = await params;
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest, { params }: AdminGameStatusRout
   const status = formData.get("status");
 
   if (status !== GameStatus.PUBLISHED && status !== GameStatus.ARCHIVED) {
-    return NextResponse.redirect(new URL("/admin?error=invalid-status", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/admin?error=invalid-status", env.APP_URL), { status: 303 });
   }
 
   const game = await db.game.update({
@@ -49,5 +50,5 @@ export async function POST(request: NextRequest, { params }: AdminGameStatusRout
     }
   });
 
-  return NextResponse.redirect(new URL("/admin", request.url), { status: 303 });
+  return NextResponse.redirect(new URL("/admin", env.APP_URL), { status: 303 });
 }
