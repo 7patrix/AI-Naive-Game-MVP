@@ -29,6 +29,8 @@ export default async function RootLayout({
             </Link>
             <div className="flex items-center gap-4 text-sm font-medium text-slate-600">
               <Link className="transition hover:text-indigo-700" href="/create">创建</Link>
+              <Link className="transition hover:text-indigo-700" href="/users">创作者</Link>
+              {user ? <Link className="transition hover:text-indigo-700" href="/account/profile">个人资料</Link> : null}
               {user ? <Link className="transition hover:text-indigo-700" href="/account/api-keys">API 管理</Link> : null}
               {isAdmin ? <Link className="transition hover:text-indigo-700" href="/admin">管理后台</Link> : null}
               {user ? (

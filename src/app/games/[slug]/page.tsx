@@ -4,6 +4,7 @@ import { GameEventType, GameStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { remoteGameManifestSchema, type RemoteGameManifest } from "@/lib/game-manifest";
+import { getUserDisplayName, getUserProfileHref } from "@/lib/user-profile";
 
 type GameDetailPageProps = {
   params: Promise<{
@@ -39,8 +40,11 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
     include: {
       author: {
         select: {
+          id: true,
+          username: true,
           name: true,
-          email: true
+          email: true,
+          avatarUrl: true
         }
       },
       likes: {
@@ -162,7 +166,18 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
         <dl className="mt-5 space-y-4 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-slate-500">作者</dt>
-            <dd className="font-medium text-slate-900">{game.author.name ?? game.author.email}</dd>
+            <dd className="text-right font-medium text-slate-900">
+              <Link className="inline-flex items-center justify-end gap-2 text-indigo-700" href={getUserProfileHref(game.author)}>
+                {game.author.avatarUrl ? (
+                  <img
+                    alt={getUserDisplayName(game.author)}
+                    className="h-7 w-7 rounded-full object-cover"
+                    src={game.author.avatarUrl}
+                  />
+                ) : null}
+                {getUserDisplayName(game.author)}
+              </Link>
+            </dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-slate-500">发布时间</dt>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GameStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getUserDisplayName, getUserProfileHref } from "@/lib/user-profile";
 
 type HomePageProps = {
   searchParams: Promise<{
@@ -82,8 +83,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         publishedAt: true,
         author: {
           select: {
+            id: true,
+            username: true,
             name: true,
-            email: true
+            email: true,
+            avatarUrl: true
           }
         }
       },
@@ -227,7 +231,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <h3 className="mt-4 text-lg font-semibold text-slate-950">{game.title}</h3>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{game.description}</p>
                   <div className="mt-5 flex items-center justify-between text-xs text-slate-500">
-                    <span>作者：{game.author.name ?? game.author.email}</span>
+                    <Link className="inline-flex items-center gap-2 font-semibold text-slate-600 hover:text-indigo-700" href={getUserProfileHref(game.author)}>
+                      {game.author.avatarUrl ? (
+                        <img
+                          alt={getUserDisplayName(game.author)}
+                          className="h-6 w-6 rounded-full object-cover"
+                          src={game.author.avatarUrl}
+                        />
+                      ) : (
+                        <span className="grid h-6 w-6 place-items-center rounded-full bg-slate-900 text-[10px] text-white">
+                          {getUserDisplayName(game.author).slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                      {getUserDisplayName(game.author)}
+                    </Link>
                     <span>{game.likeCount} 赞</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
