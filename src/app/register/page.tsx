@@ -43,6 +43,14 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
           required
           type="password"
         />
+        <input
+          className="w-full rounded-xl border border-slate-300 px-4 py-3"
+          minLength={8}
+          name="confirmPassword"
+          placeholder="再次输入密码"
+          required
+          type="password"
+        />
         <button
           className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white"
           type="submit"

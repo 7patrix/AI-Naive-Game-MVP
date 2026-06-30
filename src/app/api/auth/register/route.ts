@@ -9,7 +9,8 @@ import { env } from "@/lib/env";
 const registerSchema = z.object({
   email: z.string().email(),
   name: z.string().trim().max(80).optional(),
-  password: z.string().min(8)
+  password: z.string().min(8),
+  confirmPassword: z.string().min(8)
 });
 
 function redirectWithError(request: NextRequest, error: string) {
@@ -36,11 +37,16 @@ export async function POST(request: NextRequest) {
   const parsed = registerSchema.safeParse({
     email: formData.get("email"),
     name: formData.get("name") || undefined,
-    password: formData.get("password")
+    password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword")
   });
 
   if (!parsed.success) {
     return redirectWithError(request, "请输入有效邮箱，并设置至少 8 位密码。");
+  }
+
+  if (parsed.data.password !== parsed.data.confirmPassword) {
+    return redirectWithError(request, "两次输入的密码不一致。");
   }
 
   const email = parsed.data.email.toLowerCase();

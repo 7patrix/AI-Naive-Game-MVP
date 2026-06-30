@@ -5,6 +5,7 @@ type LoginPageProps = {
     error?: string;
     loggedOut?: string;
     next?: string;
+    passwordReset?: string;
   }>;
 };
 
@@ -27,6 +28,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       {params.loggedOut ? (
         <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           已退出登录。你可以重新登录或切换账号。
+        </div>
+      ) : null}
+      {params.passwordReset ? (
+        <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          密码已更新，请使用新密码登录。
         </div>
       ) : null}
       <form action="/api/auth/login" className="mt-6 space-y-4" method="post">
@@ -52,12 +58,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           登录
         </button>
       </form>
-      <p className="mt-5 text-center text-sm text-slate-600">
-        还没有账号？{" "}
-        <Link className="font-semibold text-indigo-700" href="/register">
-          去注册
+      <div className="mt-5 flex items-center justify-between text-sm text-slate-600">
+        <Link className="font-semibold text-indigo-700" href="/forgot-password">
+          忘记密码？
         </Link>
-      </p>
+        <span>
+          还没有账号？{" "}
+          <Link className="font-semibold text-indigo-700" href="/register">
+            去注册
+          </Link>
+        </span>
+      </div>
       <div className="my-6 flex items-center gap-3 text-xs text-slate-400">
         <div className="h-px flex-1 bg-slate-200" />
         或
