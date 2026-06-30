@@ -4,8 +4,8 @@ import { getCurrentUser, isAdminUser } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI 游戏工坊 MVP",
-  description: "AI Native 互动游戏平台 MVP"
+  title: "AI 游戏工坊",
+  description: "用 AI 快速创建、分享和游玩互动小游戏"
 };
 
 export default async function RootLayout({

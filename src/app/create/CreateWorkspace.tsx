@@ -63,7 +63,7 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
       <div className="space-y-8">
         {selectedJobId ? (
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">
-            生成任务已创建：<span className="font-mono">{selectedJobId}</span>。Worker 会异步处理它。
+            创作已开始：<span className="font-mono">{selectedJobId}</span>。完成后会在右侧显示预览。
           </div>
         ) : null}
         {error ? (
@@ -74,7 +74,7 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">创作者工作台</p>
           <h1 className="mt-3 text-3xl font-bold text-slate-950">输入创意生成小游戏</h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            左侧提交 prompt 和素材，后台 BullMQ Worker 执行 Agent 流水线；右侧会轮询当前任务并在发布后展示预览。
+            写下你想玩的规则、角色和风格，也可以上传图片或素材。生成完成后，可以立即试玩并继续调整。
           </p>
           <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
             当前登录账号：<span className="font-semibold">{userEmail}</span>。这里创建的生成任务会绑定到该账号。
@@ -82,7 +82,7 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
           {remixSource ? (
             <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-800">
               正在 Remix：<span className="font-semibold">{remixSource.title}</span> v
-              {remixSource.currentVersionNumber}。提交后会记录源游戏和源版本。
+              {remixSource.currentVersionNumber}。提交后会基于原作品生成新的版本。
             </div>
           ) : null}
           <form action="/api/generation-jobs" className="mt-6 space-y-4" encType="multipart/form-data" method="post">
@@ -108,10 +108,10 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
         <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">任务历史</p>
-              <h2 className="mt-3 text-2xl font-bold text-slate-950">最近生成任务</h2>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">创作记录</p>
+              <h2 className="mt-3 text-2xl font-bold text-slate-950">最近作品进度</h2>
             </div>
-            <p className="text-sm text-slate-500">点击任一任务可切换右侧实时预览。</p>
+            <p className="text-sm text-slate-500">点击任一记录可切换右侧预览。</p>
           </div>
 
           {jobs.length > 0 ? (
@@ -138,7 +138,7 @@ export function CreateWorkspace({ userEmail, initialJobs, selectedJobId, error, 
             </div>
           ) : (
             <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-600">
-              暂无生成任务。提交上方表单后，这里会显示任务状态和 Agent 日志。
+              暂无创作记录。提交上方表单后，这里会显示生成进度。
             </div>
           )}
         </section>

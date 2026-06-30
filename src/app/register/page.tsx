@@ -14,7 +14,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">账号</p>
       <h1 className="mt-3 text-3xl font-bold text-slate-950">注册账号</h1>
       <p className="mt-3 text-sm leading-6 text-slate-600">
-        使用邮箱和密码创建账号。密码会先加密哈希，再写入数据库。
+        使用邮箱和密码创建账号。注册后请完成邮箱验证，即可开始创作和收藏游戏。
       </p>
       {params.error ? (
         <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

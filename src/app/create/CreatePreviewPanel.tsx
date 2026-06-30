@@ -16,7 +16,7 @@ export function CreatePreviewPanel({ job }: CreatePreviewPanelProps) {
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">实时预览</p>
         <h2 className="mt-3 text-2xl font-bold text-slate-950">等待创作任务</h2>
         <p className="mt-3 leading-6">
-          提交 prompt 后，右侧会持续读取任务状态。Worker 发布出 `bundleUrl` 后，可以直接在这里打开 iframe 预览。
+          提交创意后，这里会显示生成进度。作品完成后，可以直接在这里试玩。
         </p>
       </aside>
     );
@@ -30,14 +30,14 @@ export function CreatePreviewPanel({ job }: CreatePreviewPanelProps) {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">实时预览</p>
         <h2 className="mt-3 text-2xl font-bold text-slate-950">
-          {job.game?.title ?? (isRunning ? "Agent 正在生成" : "任务状态")}
+          {job.game?.title ?? (isRunning ? "正在生成作品" : "生成状态")}
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           {isRunning
             ? "左侧可以继续查看历史，右侧会自动轮询当前任务。"
             : job.status === "FAILED"
               ? "任务失败后可以保留上下文直接重试。"
-              : "发布完成后，预览会直接加载对象存储中的远端 HTML。"}
+              : "作品完成后，可以在这里立即试玩。"}
         </p>
       </section>
 

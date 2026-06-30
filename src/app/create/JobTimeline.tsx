@@ -72,7 +72,7 @@ export function JobTimeline({ job, compact = false }: JobTimelineProps) {
       ) : null}
 
       <div className="rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
-        <p className="font-semibold text-indigo-200">Agent 日志</p>
+        <p className="font-semibold text-indigo-200">生成进度</p>
         {latestLogs.length > 0 ? (
           <ol className="mt-3 space-y-2">
             {latestLogs.map((log) => (
@@ -84,7 +84,7 @@ export function JobTimeline({ job, compact = false }: JobTimelineProps) {
             ))}
           </ol>
         ) : (
-          <p className="mt-3 text-slate-400">等待 Worker 写入日志。</p>
+          <p className="mt-3 text-slate-400">正在准备生成，请稍候。</p>
         )}
       </div>
     </div>

@@ -171,7 +171,7 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
             <dd className="font-medium text-slate-900">{game._count.favorites}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-slate-500">埋点事件</dt>
+            <dt className="text-slate-500">游玩记录</dt>
             <dd className="font-medium text-slate-900">{game._count.events}</dd>
           </div>
           <div className="flex justify-between gap-4">
@@ -179,9 +179,9 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
             <dd className="font-medium text-slate-900">{game._count.reports}</dd>
           </div>
           <div>
-            <dt className="text-slate-500">Manifest</dt>
-            <dd className="mt-1 break-all font-mono text-xs text-slate-700">
-              {game.manifestUrl ?? "暂未生成"}
+            <dt className="text-slate-500">可玩状态</dt>
+            <dd className="mt-1 text-sm font-medium text-slate-900">
+              {game.manifestUrl ? "已准备好" : "准备中"}
             </dd>
           </div>
         </dl>

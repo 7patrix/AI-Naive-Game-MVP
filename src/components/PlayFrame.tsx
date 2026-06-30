@@ -209,17 +209,17 @@ export function PlayFrame({
                     ? "预览已就绪"
                     : "准备开始游戏"
                   : state === "loading"
-                    ? "正在加载远端游戏"
-                    : "远端游戏加载较慢"}
+                    ? "正在加载游戏"
+                    : "游戏加载较慢"}
               </h2>
               <p className="mt-2 max-w-md text-sm leading-6 text-slate-300">
                 {state === "idle"
                   ? compact
-                    ? "点击后在右侧预览 iframe 中运行当前生成结果。"
-                    : "点击开始后才会挂载 iframe，避免游戏在你准备操作前自动开局。"
+                    ? "点击后在右侧预览当前作品。"
+                    : "点击开始后再进入游戏，避免在你准备操作前自动开局。"
                   : state === "loading"
-                    ? "正在从对象存储加载 iframe 入口，加载完成后会自动进入游戏。"
-                    : "iframe 还没有完成加载，可以重新开始，或返回详情页检查 Manifest / Bundle 地址。"}
+                    ? "游戏资源正在准备中，加载完成后会自动进入游戏。"
+                    : "游戏还没有完成加载，可以重新开始，或稍后再试。"}
               </p>
               {state !== "loading" ? (
                 <button

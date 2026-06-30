@@ -103,7 +103,7 @@ export default async function AdminPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-950">内容治理</h2>
         <p className="mt-2 text-sm text-slate-600">
-          下架会将游戏状态改为 ARCHIVED，首页和详情页不再公开展示，但数据库和对象存储记录会保留。
+          下架后游戏将不再公开展示，管理员仍可在后台追踪和恢复。
         </p>
         <div className="mt-6 overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
