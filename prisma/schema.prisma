@@ -46,6 +46,15 @@ enum GameReportStatus {
   DISMISSED
 }
 
+enum ApiCredentialProvider {
+  OPENAI_COMPATIBLE
+}
+
+enum ApiCredentialSource {
+  PLATFORM
+  USER_KEY
+}
+
 model User {
   id              String          @id @default(cuid())
   email           String          @unique
@@ -67,6 +76,28 @@ model User {
   resolvedReports GameReport[]    @relation("ResolverReports")
   adminActions    AdminAuditLog[]
   emailTokens     EmailVerificationToken[]
+  apiCredentials  UserApiCredential[]
+}
+
+model UserApiCredential {
+  id              String                @id @default(cuid())
+  userId          String
+  provider        ApiCredentialProvider @default(OPENAI_COMPATIBLE)
+  name            String
+  baseUrl         String
+  modelName       String
+  wireApi         String                @default("chat")
+  encryptedApiKey String
+  apiKeyLast4     String
+  isEnabled       Boolean               @default(true)
+  lastUsedAt      DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs            GenerationJob[]
+
+  @@index([userId, isEnabled])
+  @@index([provider])
 }
 
 model EmailVerificationToken {
@@ -189,6 +220,8 @@ model GenerationJob {
   estimatedCostCents   Int                 @default(0)
   modelInputTokens     Int                 @default(0)
   modelOutputTokens    Int                 @default(0)
+  apiCredentialSource  ApiCredentialSource @default(PLATFORM)
+  apiCredentialId      String?
   userId               String
   parentGameId         String?
   remixSourceVersionId String?
@@ -197,6 +230,7 @@ model GenerationJob {
   startedAt            DateTime?
   finishedAt           DateTime?
   user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiCredential        UserApiCredential?  @relation(fields: [apiCredentialId], references: [id], onDelete: SetNull)
   parentGame           Game?               @relation("RemixJobs", fields: [parentGameId], references: [id], onDelete: SetNull)
   remixSourceVersion   GameVersion?        @relation("RemixSourceJobs", fields: [remixSourceVersionId], references: [id], onDelete: SetNull)
   logs                 AgentLog[]
@@ -206,6 +240,7 @@ model GenerationJob {
   versions             GameVersion[]       @relation("JobVersions")
 
   @@index([userId])
+  @@index([apiCredentialId])
   @@index([parentGameId])
   @@index([status, createdAt])
 }

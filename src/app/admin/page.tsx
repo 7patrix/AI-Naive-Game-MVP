@@ -54,6 +54,7 @@ export default async function AdminPage() {
       include: {
         user: { select: { email: true, name: true } },
         game: { select: { title: true, slug: true } },
+        apiCredential: { select: { name: true, apiKeyLast4: true } },
         logs: { orderBy: { createdAt: "desc" }, take: 3 }
       },
       orderBy: { createdAt: "desc" },
@@ -215,6 +216,12 @@ export default async function AdminPage() {
                 <p className="mt-3 line-clamp-2 text-sm text-slate-700">{job.prompt}</p>
                 <p className="mt-2 text-xs text-slate-500">
                   用户：{job.user.name ?? job.user.email} / 成本估算：{(job.estimatedCostCents / 100).toFixed(2)} USD
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  额度来源：
+                  {job.apiCredentialSource === "USER_KEY"
+                    ? `用户自带 API${job.apiCredential ? `（${job.apiCredential.name} / ****${job.apiCredential.apiKeyLast4}）` : ""}`
+                    : "平台额度"}
                 </p>
                 {job.game ? (
                   <Link className="mt-2 inline-flex text-xs font-semibold text-indigo-700" href={`/games/${job.game.slug}`}>

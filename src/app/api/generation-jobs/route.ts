@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GameStatus, GenerationJobStatus, ModerationStatus, UploadedAssetKind } from "@prisma/client";
+import { ApiCredentialSource, GameStatus, GenerationJobStatus, ModerationStatus, UploadedAssetKind } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -134,10 +134,24 @@ export async function POST(request: NextRequest) {
 
   const moderationReport = moderatePrompt(parsed.data.prompt);
   const isRejected = moderationReport.status === ModerationStatus.REJECTED;
+  const apiCredential = await db.userApiCredential.findFirst({
+    where: {
+      userId: user.id,
+      isEnabled: true
+    },
+    orderBy: {
+      updatedAt: "desc"
+    },
+    select: {
+      id: true
+    }
+  });
   const job = await db.generationJob.create({
     data: {
       prompt: parsed.data.prompt,
       userId: user.id,
+      apiCredentialSource: apiCredential ? ApiCredentialSource.USER_KEY : ApiCredentialSource.PLATFORM,
+      apiCredentialId: apiCredential?.id,
       status: isRejected ? GenerationJobStatus.FAILED : GenerationJobStatus.PENDING,
       progress: isRejected ? 100 : 0,
       error: isRejected ? "内容审核未通过，请调整创意描述后重试。" : null,

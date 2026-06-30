@@ -8,6 +8,7 @@ export type CreateJob = {
   error: string | null;
   moderationStatus: string;
   estimatedCostCents: number;
+  apiCredentialSource: "PLATFORM" | "USER_KEY";
   createdAt: string;
   updatedAt: string;
   logs: {

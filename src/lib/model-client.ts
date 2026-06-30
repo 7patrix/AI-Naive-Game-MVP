@@ -36,6 +36,12 @@ type ResponsesApiResponse = {
 type VisionInput = {
   dataUrl: string;
 };
+export type ModelClientConfig = {
+  apiKey: string;
+  baseUrl: string;
+  modelName: string;
+  wireApi: "chat" | "responses";
+};
 type ModelUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -50,8 +56,21 @@ let accumulatedUsage: ModelUsage = {
   calls: 0
 };
 
-export function hasModelConfig() {
-  return Boolean(env.OPENAI_API_KEY);
+export function getPlatformModelConfig(): ModelClientConfig | null {
+  if (!env.OPENAI_API_KEY) {
+    return null;
+  }
+
+  return {
+    apiKey: env.OPENAI_API_KEY,
+    baseUrl: env.OPENAI_BASE_URL,
+    modelName: env.MODEL_NAME,
+    wireApi: env.MODEL_WIRE_API
+  };
+}
+
+export function hasModelConfig(config?: ModelClientConfig | null) {
+  return Boolean(config?.apiKey ?? env.OPENAI_API_KEY);
 }
 
 function addUsage(inputTokens = 0, outputTokens = 0, totalTokens = inputTokens + outputTokens) {
@@ -78,27 +97,35 @@ export function consumeModelUsage() {
   return usage.calls > 0 ? usage : null;
 }
 
-async function complete(messages: ChatMessage[]) {
-  if (!env.OPENAI_API_KEY) {
+function resolveModelConfig(config?: ModelClientConfig | null) {
+  const resolved = config ?? getPlatformModelConfig();
+
+  if (!resolved?.apiKey) {
     throw new Error("OPENAI_API_KEY is not configured.");
   }
 
-  if (env.MODEL_WIRE_API === "responses") {
-    return completeWithResponsesApi(messages);
-  }
-
-  return completeWithChatCompletions(messages);
+  return resolved;
 }
 
-async function completeWithChatCompletions(messages: ChatMessage[]) {
-  const response = await outboundFetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+async function complete(messages: ChatMessage[], config?: ModelClientConfig | null) {
+  const resolved = resolveModelConfig(config);
+
+  if (resolved.wireApi === "responses") {
+    return completeWithResponsesApi(messages, resolved);
+  }
+
+  return completeWithChatCompletions(messages, resolved);
+}
+
+async function completeWithChatCompletions(messages: ChatMessage[], config: ModelClientConfig) {
+  const response = await outboundFetch(`${config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.MODEL_NAME,
+      model: config.modelName,
       messages
     })
   });
@@ -125,18 +152,18 @@ async function completeWithChatCompletions(messages: ChatMessage[]) {
   return content;
 }
 
-async function completeWithResponsesApi(messages: ChatMessage[]) {
+async function completeWithResponsesApi(messages: ChatMessage[], config: ModelClientConfig) {
   const input = messages
     .map((message) => `${message.role === "system" ? "System" : "User"}:\n${message.content}`)
     .join("\n\n");
-  const response = await outboundFetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}/responses`, {
+  const response = await outboundFetch(`${config.baseUrl.replace(/\/$/, "")}/responses`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.MODEL_NAME,
+      model: config.modelName,
       input
     })
   });
@@ -169,30 +196,28 @@ async function completeWithResponsesApi(messages: ChatMessage[]) {
   return content;
 }
 
-export async function completeText(system: string, user: string) {
+export async function completeText(system: string, user: string, config?: ModelClientConfig | null) {
   return complete([
     { role: "system", content: system },
     { role: "user", content: user }
-  ]);
+  ], config);
 }
 
-export async function completeVisionText(prompt: string, image: VisionInput) {
-  if (!env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
+export async function completeVisionText(prompt: string, image: VisionInput, config?: ModelClientConfig | null) {
+  const resolved = resolveModelConfig(config);
 
-  if (env.MODEL_WIRE_API !== "responses") {
+  if (resolved.wireApi !== "responses") {
     throw new Error("Vision input requires MODEL_WIRE_API=responses.");
   }
 
-  const response = await outboundFetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}/responses`, {
+  const response = await outboundFetch(`${resolved.baseUrl.replace(/\/$/, "")}/responses`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${resolved.apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.MODEL_NAME,
+      model: resolved.modelName,
       input: [
         {
           role: "user",
@@ -233,8 +258,8 @@ export async function completeVisionText(prompt: string, image: VisionInput) {
   return content;
 }
 
-export async function completeJson<T>(system: string, user: string) {
-  const content = await completeText(system, user);
+export async function completeJson<T>(system: string, user: string, config?: ModelClientConfig | null) {
+  const content = await completeText(system, user, config);
   const match = content.match(/```json\s*([\s\S]*?)```/) ?? content.match(/(\{[\s\S]*\})/);
   const json = match?.[1] ?? match?.[0] ?? content;
   return JSON.parse(json) as T;

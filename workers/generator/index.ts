@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
+import { ApiCredentialSource, GameStatus, GenerationJobStatus, PrismaClient } from "@prisma/client";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { Worker as BullWorker } from "bullmq";
 import type { RemoteGameManifest } from "../../src/lib/game-manifest";
@@ -9,8 +9,10 @@ import {
   completeVisionText,
   consumeModelUsage,
   hasModelConfig,
-  resetModelUsage
+  resetModelUsage,
+  type ModelClientConfig
 } from "../../src/lib/model-client";
+import { decryptApiKey } from "../../src/lib/api-credential-crypto";
 import {
   GENERATION_JOB_NAME,
   GENERATION_QUEUE_NAME,
@@ -22,6 +24,7 @@ import { uploadObject } from "../../src/lib/storage";
 const prisma = new PrismaClient();
 
 type Job = NonNullable<Awaited<ReturnType<typeof claimJob>>>;
+type JobModelConfig = ModelClientConfig | null;
 type GameSpec = {
   title: string;
   genre: string;
@@ -104,6 +107,21 @@ function jsonForScript(value: unknown) {
 
 function hashArtifactPayload(payload: unknown) {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function getJobModelConfig(job: Job): JobModelConfig {
+  if (!job.apiCredential) {
+    return null;
+  }
+
+  const wireApi = job.apiCredential.wireApi === "responses" ? "responses" : "chat";
+
+  return {
+    apiKey: decryptApiKey(job.apiCredential.encryptedApiKey),
+    baseUrl: job.apiCredential.baseUrl,
+    modelName: job.apiCredential.modelName,
+    wireApi
+  };
 }
 
 async function writeArtifact(jobId: string, type: string, payload: unknown, storageKey?: string, publicUrl?: string) {
@@ -324,7 +342,7 @@ function calculateEstimatedCostCents(inputTokens: number, outputTokens: number) 
   return Math.max(1, Math.ceil(estimatedDollars * 100));
 }
 
-function estimateGenerationCost(job: Job, spec: GameSpec, bundlePlan: BundlePlan): CostEstimate {
+function estimateGenerationCost(job: Job, spec: GameSpec, bundlePlan: BundlePlan, modelConfig: JobModelConfig): CostEstimate {
   const usage = consumeModelUsage();
   const estimatedInputTokens = estimateTokens(
     [job.prompt, getRemixContext(job), JSON.stringify(job.inputFiles ?? []), JSON.stringify(spec)].join("\n")
@@ -342,7 +360,7 @@ function estimateGenerationCost(job: Job, spec: GameSpec, bundlePlan: BundlePlan
     };
   }
 
-  if (!hasModelConfig() || bundlePlan.generator === "fallback") {
+  if (!hasModelConfig(modelConfig) || bundlePlan.generator === "fallback") {
     return {
       inputTokens: estimatedInputTokens,
       outputTokens: estimatedOutputTokens,
@@ -727,6 +745,7 @@ async function claimJob(jobId: string) {
       id: jobId
     },
     include: {
+      apiCredential: true,
       parentGame: true,
       remixSourceVersion: true
     }
@@ -756,7 +775,7 @@ async function updateProgress(jobId: string, progress: number) {
   });
 }
 
-async function analyzeAsset(asset: InputAsset): Promise<AssetAnalysis> {
+async function analyzeAsset(asset: InputAsset, modelConfig: JobModelConfig): Promise<AssetAnalysis> {
   const kind = getAssetKind(asset.contentType);
   const base = {
     filename: asset.filename,
@@ -774,14 +793,15 @@ async function analyzeAsset(asset: InputAsset): Promise<AssetAnalysis> {
       const dimensionText = dimensions ? `，尺寸约 ${dimensions.width}x${dimensions.height}` : "";
       let visionSummary: string | undefined;
 
-      if (hasModelConfig()) {
+      if (hasModelConfig(modelConfig)) {
         try {
           const base64 = Buffer.from(bytes).toString("base64");
           visionSummary = await completeVisionText(
             "请用中文分析这张用户上传的游戏参考图片。输出 2-4 句，包含画面主体、风格、主色调、可用于游戏的角色/场景/道具建议。不要输出 Markdown。",
             {
               dataUrl: `data:${asset.contentType};base64,${base64}`
-            }
+            },
+            modelConfig
           );
         } catch (error) {
           visionSummary = `视觉模型分析失败：${error instanceof Error ? error.message : "unknown"}`;
@@ -842,7 +862,7 @@ async function analyzeAsset(asset: InputAsset): Promise<AssetAnalysis> {
   };
 }
 
-async function runAssetAnalyzerAgent(job: Job) {
+async function runAssetAnalyzerAgent(job: Job, modelConfig: JobModelConfig) {
   const assets = getInputAssets(job);
 
   if (assets.length === 0) {
@@ -850,7 +870,7 @@ async function runAssetAnalyzerAgent(job: Job) {
     return [];
   }
 
-  const analyses = await Promise.all(assets.map(analyzeAsset));
+  const analyses = await Promise.all(assets.map((asset) => analyzeAsset(asset, modelConfig)));
   const artifact = await writeArtifact(job.id, "asset-analysis.v1", analyses);
   await addLog(job.id, "AssetAnalyzerAgent", "assets_analyzed", `已分析 ${analyses.length} 个上传素材。`, {
     analyses,
@@ -905,16 +925,17 @@ function validateGeneratedHtml(html: string, assetAnalyses: AssetAnalysis[]) {
   };
 }
 
-async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[]) {
+async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[], modelConfig: JobModelConfig) {
   let source: "llm" | "fallback" = "fallback";
   let spec: GameSpec = buildFallbackSpec(job.prompt);
   const assetContext = buildAssetContext(assetAnalyses);
 
-  if (hasModelConfig()) {
+  if (hasModelConfig(modelConfig)) {
     try {
       spec = await completeJson<GameSpec>(
         "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。",
-        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、图标或 UI 参考。`
+        `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、图标或 UI 参考。`,
+        modelConfig
       );
       source = "llm";
     } catch (error) {
@@ -935,7 +956,7 @@ async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[]) {
   return spec;
 }
 
-async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnalysis[], mode: "initial" | "revision" | "fallback" = "initial") {
+async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnalysis[], modelConfig: JobModelConfig, mode: "initial" | "revision" | "fallback" = "initial") {
   const bundlePlan: BundlePlan = {
     entry: "index.html",
     runtime: "iframe sandbox",
@@ -944,11 +965,12 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
   };
   const assetContext = buildAssetContext(assetAnalyses);
 
-  if (mode !== "fallback" && hasModelConfig()) {
+  if (mode !== "fallback" && hasModelConfig(modelConfig)) {
     try {
       const html = await completeText(
         "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。",
-        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。`
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。`,
+        modelConfig
       );
       if (html.includes("<html") && html.includes("</html>")) {
         const validation = validateGeneratedHtml(html, assetAnalyses);
@@ -1132,6 +1154,10 @@ async function runPublisherAgent(
 
 const GenerationGraphState = Annotation.Root({
   job: Annotation<Job>(),
+  modelConfig: Annotation<JobModelConfig>({
+    reducer: (_, next) => next,
+    default: () => null
+  }),
   assetAnalyses: Annotation<AssetAnalysis[]>({
     reducer: (_, next) => next,
     default: () => []
@@ -1169,12 +1195,12 @@ const GenerationGraphState = Annotation.Root({
 function createGenerationGraph() {
   return new StateGraph(GenerationGraphState)
     .addNode("asset_analyzer", async (state) => {
-      const assetAnalyses = await runAssetAnalyzerAgent(state.job);
+      const assetAnalyses = await runAssetAnalyzerAgent(state.job, state.modelConfig);
       await wait(250);
       return { assetAnalyses };
     })
     .addNode("planner", async (state) => {
-      const spec = await runPlannerAgent(state.job, state.assetAnalyses);
+      const spec = await runPlannerAgent(state.job, state.assetAnalyses, state.modelConfig);
       await wait(250);
       return { spec };
     })
@@ -1183,7 +1209,7 @@ function createGenerationGraph() {
         throw new Error("PlannerAgent did not produce a game spec.");
       }
 
-      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses);
+      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, state.modelConfig);
       await wait(250);
       return { bundlePlan };
     })
@@ -1198,7 +1224,7 @@ function createGenerationGraph() {
         "revision_started",
         "Reviewer 未通过，开始生成修订版产物。"
       );
-      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, "revision");
+      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, state.modelConfig, "revision");
       await wait(250);
       return { bundlePlan, retryCount: state.retryCount + 1 };
     })
@@ -1213,7 +1239,7 @@ function createGenerationGraph() {
         "fallback_started",
         "Reviewer 多次未通过，切换到本地安全模板生成器。"
       );
-      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, "fallback");
+      const bundlePlan = await runCoderAgent(state.job, state.spec, state.assetAnalyses, state.modelConfig, "fallback");
       await wait(250);
       return { bundlePlan, retryCount: state.retryCount + 1 };
     })
@@ -1245,7 +1271,7 @@ function createGenerationGraph() {
         throw new Error("CostAgent is missing spec or bundle plan.");
       }
 
-      const costEstimate = estimateGenerationCost(state.job, state.spec, state.bundlePlan);
+      const costEstimate = estimateGenerationCost(state.job, state.spec, state.bundlePlan, state.modelConfig);
       await addLog(state.job.id, "CostAgent", "cost_estimated", "已估算本次生成 token 与成本。", {
         ...costEstimate,
         artifact: await writeArtifact(state.job.id, "cost-report.v1", costEstimate)
@@ -1279,8 +1305,29 @@ function createGenerationGraph() {
 async function runClaimedJob(job: Job) {
   try {
     resetModelUsage();
+    const modelConfig = getJobModelConfig(job);
+
+    if (job.apiCredentialSource === ApiCredentialSource.USER_KEY && job.apiCredentialId) {
+      await prisma.userApiCredential.update({
+        where: { id: job.apiCredentialId },
+        data: { lastUsedAt: new Date() }
+      });
+    }
+
+    await addLog(
+      job.id,
+      "System",
+      "api_config_selected",
+      modelConfig ? "本次生成将使用用户自带 API 配置。" : "本次生成将使用平台默认 API 配置或本地生成器。",
+      {
+        source: job.apiCredentialSource,
+        apiCredentialId: job.apiCredentialId,
+        modelName: modelConfig?.modelName ?? null,
+        wireApi: modelConfig?.wireApi ?? null
+      }
+    );
     const graph = createGenerationGraph();
-    const result = await graph.invoke({ job });
+    const result = await graph.invoke({ job, modelConfig });
 
     if (!result.spec || !result.bundlePlan || !result.reviewReport || !result.publishResult || !result.costEstimate) {
       throw new Error("LangGraph generation finished with incomplete state.");

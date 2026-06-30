@@ -53,6 +53,9 @@ export function JobTimeline({ job, compact = false }: JobTimelineProps) {
           <p className="mt-1 text-xs font-normal text-slate-500">
             估算成本：{(job.estimatedCostCents / 100).toFixed(2)} USD
           </p>
+          <p className="mt-1 text-xs font-normal text-slate-500">
+            来源：{job.apiCredentialSource === "USER_KEY" ? "自带 API" : "平台额度"}
+          </p>
         </div>
       </div>
 

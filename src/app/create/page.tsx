@@ -23,6 +23,7 @@ function serializeJob(job: Awaited<ReturnType<typeof getJobs>>[number]): CreateJ
     error: job.error,
     moderationStatus: job.moderationStatus,
     estimatedCostCents: job.estimatedCostCents,
+    apiCredentialSource: job.apiCredentialSource,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
     parentGame: job.parentGame,
