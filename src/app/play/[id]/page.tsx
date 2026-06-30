@@ -131,6 +131,19 @@ export default async function PlayPage({ params }: PlayPageProps) {
                 : "读取游戏信息中"}
             </p>
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2">
+            <p className="text-sm font-medium text-slate-700">输入协议</p>
+            <p className="mt-2 text-xs text-slate-600">
+              {manifest ? `AI Arcade Input v${manifest.inputSchemaVersion}` : "读取游戏信息中"}
+            </p>
+            {manifest?.controlHints ? (
+              <ul className="mt-3 space-y-1 text-xs text-slate-500">
+                {manifest.controlHints.movement ? <li>移动：{manifest.controlHints.movement}</li> : null}
+                {manifest.controlHints.primaryAction ? <li>主动作：{manifest.controlHints.primaryAction}</li> : null}
+                {manifest.controlHints.restartAction ? <li>重开：{manifest.controlHints.restartAction}</li> : null}
+              </ul>
+            ) : null}
+          </div>
         </div>
       </section>
 

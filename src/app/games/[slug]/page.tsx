@@ -225,6 +225,17 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
               </dd>
             ) : null}
           </div>
+          {manifest ? (
+            <div>
+              <dt className="text-slate-500">输入协议</dt>
+              <dd className="mt-1 text-sm font-medium text-slate-900">
+                AI Arcade Input v{manifest.inputSchemaVersion}
+              </dd>
+              <dd className="mt-1 text-xs text-slate-500">
+                {manifest.controlHints.movement ?? "按游戏内提示操作"}
+              </dd>
+            </div>
+          ) : null}
         </dl>
         <div className="mt-6 grid grid-cols-2 gap-3">
           <form action={`/api/games/${game.id}/like`} method="post">

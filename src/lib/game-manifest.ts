@@ -11,6 +11,14 @@ export const remoteGameManifestSchema = z.object({
   supportedDevices: z.array(z.enum(["desktop", "mobile"])).default(["desktop"]),
   inputMethods: z.array(z.enum(["keyboard", "pointer", "touch"])).default(["keyboard", "pointer"]),
   orientation: z.enum(["portrait", "landscape", "any"]).default("any"),
+  inputSchemaVersion: z.string().default("1.0"),
+  controlHints: z
+    .object({
+      movement: z.string().optional(),
+      primaryAction: z.string().optional(),
+      restartAction: z.string().optional()
+    })
+    .default({}),
   createdByJobId: z.string(),
   generatedAt: z.string()
 });

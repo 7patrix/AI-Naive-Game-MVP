@@ -200,6 +200,12 @@ async function uploadBasicSeedAssets(game: SeedGame) {
     supportedDevices: ["desktop", "mobile"],
     inputMethods: ["keyboard", "pointer", "touch"],
     orientation: "any",
+    inputSchemaVersion: "2.0",
+    controlHints: {
+      movement: "键盘 / WASD / 虚拟摇杆移动",
+      primaryAction: "点击或动作按钮触发主动作",
+      restartAction: "R 键或重开按钮重新开始"
+    },
     createdByJobId: `seed-${game.slug}`,
     generatedAt: new Date().toISOString()
   };

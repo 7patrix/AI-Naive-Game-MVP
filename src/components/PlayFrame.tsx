@@ -14,7 +14,30 @@ type PlayFrameProps = {
 };
 
 type LoadState = "idle" | "loading" | "loaded" | "timeout" | "error";
+type ArcadeInputMessage =
+  | {
+      type: "AI_ARCADE_INPUT";
+      kind: "move";
+      x: number;
+      y: number;
+      active: boolean;
+    }
+  | {
+      type: "AI_ARCADE_INPUT";
+      kind: "action";
+      name: "primary" | "restart";
+      pressed: boolean;
+    };
 const forwardedKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d", "W", "A", "S", "D", "r", "R"]);
+
+function keyToMove(key: string) {
+  const normalized = key.toLowerCase();
+  if (normalized === "arrowleft" || normalized === "a") return { x: -1, y: 0 };
+  if (normalized === "arrowright" || normalized === "d") return { x: 1, y: 0 };
+  if (normalized === "arrowup" || normalized === "w") return { x: 0, y: -1 };
+  if (normalized === "arrowdown" || normalized === "s") return { x: 0, y: 1 };
+  return null;
+}
 
 async function reportPlayEvent(gameId: string, type: "PLAY_LOADED" | "PLAY_ERROR", metadata: object) {
   try {
@@ -52,6 +75,7 @@ export function PlayFrame({
   const frameRef = useRef<HTMLIFrameElement>(null);
   const startedAt = useRef<number>(0);
   const hasReported = useRef(false);
+  const virtualMoveKeys = useRef<Set<string>>(new Set());
   const [measuredHeight, setMeasuredHeight] = useState<string | null>(null);
   const frameHeight = measuredHeight ?? (typeof height === "number" ? `${height}px` : height);
 
@@ -92,14 +116,28 @@ export function PlayFrame({
       }
 
       event.preventDefault();
-      frameRef.current?.contentWindow?.postMessage(
-        {
-          type: "AI_ARCADE_KEY",
-          phase,
-          key: event.key
-        },
-        "*"
-      );
+      sendKeyCompat(event.key, phase);
+
+      if (event.key.toLowerCase() === "r") {
+        sendArcadeInput({
+          type: "AI_ARCADE_INPUT",
+          kind: "action",
+          name: "restart",
+          pressed: phase === "keydown"
+        });
+        return;
+      }
+
+      const move = keyToMove(event.key);
+      if (move) {
+        sendArcadeInput({
+          type: "AI_ARCADE_INPUT",
+          kind: "move",
+          x: move.x,
+          y: move.y,
+          active: phase === "keydown"
+        });
+      }
     }
 
     const handleKeyDown = (event: KeyboardEvent) => forwardKey(event, "keydown");
@@ -119,13 +157,14 @@ export function PlayFrame({
   function startGame() {
     startedAt.current = Date.now();
     hasReported.current = false;
+    updateCompatMoveKeys(0, 0, false);
     setMeasuredHeight(null);
     setState("loading");
     setRunId((current) => current + 1);
     window.setTimeout(() => frameRef.current?.focus(), 0);
   }
 
-  function sendVirtualKey(key: string, phase: "keydown" | "keyup") {
+  function sendKeyCompat(key: string, phase: "keydown" | "keyup") {
     frameRef.current?.contentWindow?.postMessage(
       {
         type: "AI_ARCADE_KEY",
@@ -134,6 +173,60 @@ export function PlayFrame({
       },
       "*"
     );
+  }
+
+  function sendArcadeInput(message: ArcadeInputMessage) {
+    frameRef.current?.contentWindow?.postMessage(message, "*");
+  }
+
+  function sendMove(x: number, y: number, active: boolean) {
+    updateCompatMoveKeys(x, y, active);
+    sendArcadeInput({
+      type: "AI_ARCADE_INPUT",
+      kind: "move",
+      x,
+      y,
+      active
+    });
+  }
+
+  function updateCompatMoveKeys(x: number, y: number, active: boolean) {
+    const nextKeys = new Set<string>();
+    const threshold = 0.28;
+
+    if (active) {
+      if (x < -threshold) nextKeys.add("ArrowLeft");
+      if (x > threshold) nextKeys.add("ArrowRight");
+      if (y < -threshold) nextKeys.add("ArrowUp");
+      if (y > threshold) nextKeys.add("ArrowDown");
+    }
+
+    for (const key of virtualMoveKeys.current) {
+      if (!nextKeys.has(key)) {
+        sendKeyCompat(key, "keyup");
+      }
+    }
+
+    for (const key of nextKeys) {
+      if (!virtualMoveKeys.current.has(key)) {
+        sendKeyCompat(key, "keydown");
+      }
+    }
+
+    virtualMoveKeys.current = nextKeys;
+  }
+
+  function sendAction(name: "primary" | "restart", pressed: boolean) {
+    sendArcadeInput({
+      type: "AI_ARCADE_INPUT",
+      kind: "action",
+      name,
+      pressed
+    });
+
+    if (name === "restart") {
+      sendKeyCompat("r", pressed ? "keydown" : "keyup");
+    }
   }
 
   function resizeFrameToContent() {
@@ -272,43 +365,110 @@ export function PlayFrame({
           <div className="w-full bg-slate-950" style={{ height: frameHeight }} />
         )}
         {supportsTouch && !compact && state === "loaded" ? (
-          <div className="absolute bottom-4 right-4 z-20 grid grid-cols-3 grid-rows-3 gap-2 select-none touch-none">
-            <TouchButton className="col-start-2 row-start-1" label="↑" onKey={sendVirtualKey} value="ArrowUp" />
-            <TouchButton className="col-start-1 row-start-2" label="←" onKey={sendVirtualKey} value="ArrowLeft" />
-            <TouchButton className="col-start-2 row-start-2 text-xs" label="重开" onKey={sendVirtualKey} value="r" />
-            <TouchButton className="col-start-3 row-start-2" label="→" onKey={sendVirtualKey} value="ArrowRight" />
-            <TouchButton className="col-start-2 row-start-3" label="↓" onKey={sendVirtualKey} value="ArrowDown" />
-          </div>
+          <VirtualControls onAction={sendAction} onMove={sendMove} />
         ) : null}
       </div>
     </section>
   );
 }
 
-function TouchButton({
-  className,
-  label,
-  onKey,
-  value
+function VirtualControls({
+  onAction,
+  onMove
 }: {
-  className: string;
-  label: string;
-  onKey: (key: string, phase: "keydown" | "keyup") => void;
-  value: string;
+  onAction: (name: "primary" | "restart", pressed: boolean) => void;
+  onMove: (x: number, y: number, active: boolean) => void;
 }) {
   return (
-    <button
-      className={`h-12 w-12 rounded-2xl border border-white/20 bg-indigo-500/80 text-base font-bold text-white shadow-lg shadow-slate-950/30 backdrop-blur transition active:bg-indigo-400 ${className}`}
-      onPointerCancel={() => onKey(value, "keyup")}
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex items-end justify-between px-4 select-none">
+      <VirtualJoystick onMove={onMove} />
+      <div className="pointer-events-auto flex flex-col items-end gap-3">
+        <ActionButton label="动作" onAction={onAction} value="primary" />
+        <ActionButton label="重开" onAction={onAction} value="restart" />
+      </div>
+    </div>
+  );
+}
+
+function VirtualJoystick({ onMove }: { onMove: (x: number, y: number, active: boolean) => void }) {
+  const [stick, setStick] = useState({ x: 0, y: 0 });
+  const baseRef = useRef<HTMLDivElement>(null);
+
+  function updateStick(clientX: number, clientY: number) {
+    const rect = baseRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const radius = rect.width / 2;
+    const rawX = clientX - (rect.left + radius);
+    const rawY = clientY - (rect.top + radius);
+    const distance = Math.hypot(rawX, rawY);
+    const scale = distance > radius ? radius / distance : 1;
+    const x = (rawX * scale) / radius;
+    const y = (rawY * scale) / radius;
+
+    setStick({ x, y });
+    onMove(Number(x.toFixed(2)), Number(y.toFixed(2)), true);
+  }
+
+  function resetStick() {
+    setStick({ x: 0, y: 0 });
+    onMove(0, 0, false);
+  }
+
+  return (
+    <div
+      className="pointer-events-auto relative h-28 w-28 rounded-full border border-white/20 bg-slate-950/55 shadow-xl shadow-slate-950/40 backdrop-blur touch-none"
+      onPointerCancel={resetStick}
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
-        onKey(value, "keydown");
+        updateStick(event.clientX, event.clientY);
       }}
-      onPointerLeave={() => onKey(value, "keyup")}
+      onPointerLeave={resetStick}
+      onPointerMove={(event) => {
+        if (event.buttons === 0) return;
+        event.preventDefault();
+        updateStick(event.clientX, event.clientY);
+      }}
       onPointerUp={(event) => {
         event.preventDefault();
-        onKey(value, "keyup");
+        resetStick();
+      }}
+      ref={baseRef}
+    >
+      <div
+        className="absolute left-1/2 top-1/2 h-12 w-12 rounded-full bg-indigo-400/90 shadow-lg shadow-indigo-950/40"
+        style={{
+          transform: `translate(calc(-50% + ${stick.x * 36}px), calc(-50% + ${stick.y * 36}px))`
+        }}
+      />
+      <span className="absolute inset-x-0 bottom-2 text-center text-[10px] font-semibold text-white/70">移动</span>
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  onAction,
+  value
+}: {
+  label: string;
+  onAction: (name: "primary" | "restart", pressed: boolean) => void;
+  value: "primary" | "restart";
+}) {
+  return (
+    <button
+      className="h-14 min-w-14 rounded-2xl border border-white/20 bg-indigo-500/85 px-4 text-sm font-bold text-white shadow-lg shadow-slate-950/30 backdrop-blur transition active:bg-indigo-400"
+      onPointerCancel={() => onAction(value, false)}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onAction(value, true);
+      }}
+      onPointerLeave={() => onAction(value, false)}
+      onPointerUp={(event) => {
+        event.preventDefault();
+        onAction(value, false);
       }}
       type="button"
     >

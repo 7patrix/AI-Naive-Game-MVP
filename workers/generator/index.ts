@@ -532,6 +532,7 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
       const restartButton = document.getElementById("restart");
       const ctx = canvas.getContext("2d");
       const keys = new Set();
+      const virtualMove = { x: 0, y: 0, active: false };
       const player = { x: 120, y: 120, r: 15, speed: 5 };
       const uploadedPlayerImage = new Image();
       let uploadedPlayerImageReady = false;
@@ -569,6 +570,9 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
 
       function resetGame() {
         keys.clear();
+        virtualMove.x = 0;
+        virtualMove.y = 0;
+        virtualMove.active = false;
         player.x = 120;
         player.y = 120;
         meteors = createMeteors();
@@ -608,6 +612,10 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
           if (keys.has("ArrowRight") || keys.has("d")) player.x += player.speed;
           if (keys.has("ArrowUp") || keys.has("w")) player.y -= player.speed;
           if (keys.has("ArrowDown") || keys.has("s")) player.y += player.speed;
+          if (virtualMove.active) {
+            player.x += virtualMove.x * player.speed;
+            player.y += virtualMove.y * player.speed;
+          }
           player.x = clamp(player.x, player.r, width - player.r);
           player.y = clamp(player.y, player.r, height - player.r);
           score += gameMode === "collector" ? dt * 0.004 : dt * 0.015;
@@ -747,11 +755,30 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
         }
       });
       window.addEventListener("message", (event) => {
-        if (!event.data || event.data.type !== "AI_ARCADE_KEY") return;
-        const key = event.data.key;
-        if (typeof key !== "string") return;
-        if (event.data.phase === "keydown") setVirtualKey(key, true);
-        if (event.data.phase === "keyup") setVirtualKey(key, false);
+        if (!event.data) return;
+        if (event.data.type === "AI_ARCADE_KEY") {
+          const key = event.data.key;
+          if (typeof key !== "string") return;
+          if (event.data.phase === "keydown") setVirtualKey(key, true);
+          if (event.data.phase === "keyup") setVirtualKey(key, false);
+          return;
+        }
+        if (event.data.type === "AI_ARCADE_INPUT") {
+          if (event.data.kind === "move") {
+            virtualMove.x = Number(event.data.x) || 0;
+            virtualMove.y = Number(event.data.y) || 0;
+            virtualMove.active = Boolean(event.data.active);
+            return;
+          }
+          if (event.data.kind === "action" && event.data.name === "restart" && event.data.pressed) {
+            resetGame();
+            return;
+          }
+          if (event.data.kind === "action" && event.data.name === "primary" && event.data.pressed && gameMode === "reaction") {
+            score += 10;
+            moveTarget(window.innerWidth, window.innerHeight);
+          }
+        }
       });
       document.querySelectorAll("[data-key]").forEach((button) => {
         const key = button.getAttribute("data-key");
@@ -1054,8 +1081,8 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
   if (mode !== "fallback" && hasModelConfig(modelConfig)) {
     try {
       const html = await completeText(
-        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。必须同时支持桌面端和手机端：桌面端支持键盘/WASD/鼠标，手机端支持触摸、点击、拖拽或屏幕按钮。不要只依赖键盘。必须监听 postMessage 的 AI_ARCADE_KEY 消息，让外层播放器的虚拟按钮也能控制游戏。",
-        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。游戏内必须显示电脑端和手机端的操作提示，并在移动端提供可触控的操作方式。`,
+        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。必须同时支持桌面端和手机端。必须优先监听 postMessage 的 AI_ARCADE_INPUT 标准协议：kind=move 时用 x/y(-1 到 1) 控制移动；kind=action 且 name=primary 时触发跳跃/射击/确认等主动作；kind=action 且 name=restart 时重开游戏。同时必须兼容旧的 AI_ARCADE_KEY 消息。不要只依赖键盘。",
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。游戏内必须显示电脑端和手机端的操作提示，并说明：移动可用键盘/WASD/虚拟摇杆，主动作可用点击/动作按钮，重开可用 R/重开按钮。`,
         modelConfig
       );
       if (html.includes("<html") && html.includes("</html>")) {
@@ -1161,6 +1188,12 @@ async function runPublisherAgent(
     supportedDevices: ["desktop", "mobile"],
     inputMethods: ["keyboard", "pointer", "touch"],
     orientation: "any",
+    inputSchemaVersion: "2.0",
+    controlHints: {
+      movement: "键盘 / WASD / 虚拟摇杆移动",
+      primaryAction: "点击或动作按钮触发主动作",
+      restartAction: "R 键或重开按钮重新开始"
+    },
     createdByJobId: job.id,
     generatedAt: new Date().toISOString()
   };
