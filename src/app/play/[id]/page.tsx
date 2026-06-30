@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { GameEventType, GameStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { remoteGameManifestSchema } from "@/lib/game-manifest";
+import { remoteGameManifestSchema, type RemoteGameManifest } from "@/lib/game-manifest";
 import { PlayFrame } from "@/components/PlayFrame";
 
 type PlayPageProps = {
@@ -13,6 +13,19 @@ type PlayPageProps = {
 };
 
 export const dynamic = "force-dynamic";
+
+function formatDevice(device: string) {
+  if (device === "desktop") return "电脑";
+  if (device === "mobile") return "手机";
+  return device;
+}
+
+function formatInputMethod(method: string) {
+  if (method === "keyboard") return "键盘";
+  if (method === "pointer") return "鼠标/点击";
+  if (method === "touch") return "触控";
+  return method;
+}
 
 export default async function PlayPage({ params }: PlayPageProps) {
   const { id } = await params;
@@ -25,15 +38,7 @@ export default async function PlayPage({ params }: PlayPageProps) {
     notFound();
   }
 
-  let manifest:
-    | {
-        title: string;
-        entryUrl: string;
-        bundleUrl: string;
-        permissions: string[];
-        generatedAt: string;
-      }
-    | null = null;
+  let manifest: RemoteGameManifest | null = null;
   let manifestError: string | null = null;
 
   if (!game.manifestUrl) {
@@ -88,7 +93,7 @@ export default async function PlayPage({ params }: PlayPageProps) {
             </p>
             <h1 className="mt-3 text-3xl font-bold text-slate-950">{game.title}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              准备好后点击开始，游戏会在当前页面中运行。使用键盘或鼠标完成挑战，刷新后也可以重新开始。
+              准备好后点击开始，游戏会在当前页面中运行。使用键盘、鼠标或触控完成挑战，刷新后也可以重新开始。
             </p>
           </div>
           <Link
@@ -109,7 +114,21 @@ export default async function PlayPage({ params }: PlayPageProps) {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-sm font-medium text-slate-700">操作方式</p>
             <p className="mt-2 break-all font-mono text-xs text-slate-600">
-              {manifest?.permissions.includes("keyboard") ? "支持键盘操作" : "按游戏内提示操作"}
+              {manifest ? manifest.inputMethods.map(formatInputMethod).join(" / ") : "按游戏内提示操作"}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 md:col-span-2">
+            <p className="text-sm font-medium text-slate-700">设备支持</p>
+            <p className="mt-2 break-all font-mono text-xs text-slate-600">
+              {manifest
+                ? `${manifest.supportedDevices.map(formatDevice).join(" / ")}，方向：${
+                    manifest.orientation === "portrait"
+                      ? "竖屏"
+                      : manifest.orientation === "landscape"
+                        ? "横屏"
+                        : "不限"
+                  }`
+                : "读取游戏信息中"}
             </p>
           </div>
         </div>

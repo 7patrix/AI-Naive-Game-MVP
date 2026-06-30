@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { GameEventType, GameStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { remoteGameManifestSchema, type RemoteGameManifest } from "@/lib/game-manifest";
 
 type GameDetailPageProps = {
   params: Promise<{
@@ -15,6 +16,19 @@ type GameDetailPageProps = {
 };
 
 export const dynamic = "force-dynamic";
+
+function formatDevice(device: string) {
+  if (device === "desktop") return "电脑";
+  if (device === "mobile") return "手机";
+  return device;
+}
+
+function formatInputMethod(method: string) {
+  if (method === "keyboard") return "键盘";
+  if (method === "pointer") return "鼠标/点击";
+  if (method === "touch") return "触控";
+  return method;
+}
 
 export default async function GameDetailPage({ params, searchParams }: GameDetailPageProps) {
   const { slug } = await params;
@@ -90,6 +104,18 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
     where: { gameId: game.id },
     _count: { type: true }
   });
+  let manifest: RemoteGameManifest | null = null;
+  if (game.manifestUrl) {
+    try {
+      const response = await fetch(game.manifestUrl, { cache: "no-store" });
+      if (response.ok) {
+        const parsed = remoteGameManifestSchema.safeParse(await response.json());
+        manifest = parsed.success ? parsed.data : null;
+      }
+    } catch {
+      manifest = null;
+    }
+  }
   const countByType = new Map(eventCounts.map((item) => [item.type, item._count.type]));
   const likedByMe = user ? game.likes.length > 0 : false;
   const favoritedByMe = user ? game.favorites.length > 0 : false;
@@ -183,6 +209,21 @@ export default async function GameDetailPage({ params, searchParams }: GameDetai
             <dd className="mt-1 text-sm font-medium text-slate-900">
               {game.manifestUrl ? "已准备好" : "准备中"}
             </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">设备支持</dt>
+            <dd className="mt-1 text-sm font-medium text-slate-900">
+              {manifest
+                ? manifest.supportedDevices.map(formatDevice).join(" / ")
+                : game.manifestUrl
+                  ? "按游戏内提示操作"
+                  : "准备中"}
+            </dd>
+            {manifest ? (
+              <dd className="mt-1 text-xs text-slate-500">
+                {manifest.inputMethods.map(formatInputMethod).join(" / ")}
+              </dd>
+            ) : null}
           </div>
         </dl>
         <div className="mt-6 grid grid-cols-2 gap-3">

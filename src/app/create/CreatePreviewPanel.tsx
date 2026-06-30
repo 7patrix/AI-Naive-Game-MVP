@@ -48,7 +48,7 @@ export function CreatePreviewPanel({ job }: CreatePreviewPanelProps) {
           gameId={job.game.id}
           height={420}
           manifestUrl={job.game.manifestUrl}
-          permissions={["keyboard", "pointer"]}
+          permissions={["keyboard", "pointer", "touch"]}
           reportTelemetry={false}
           title={job.game.title}
         />

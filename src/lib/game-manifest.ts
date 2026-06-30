@@ -7,7 +7,10 @@ export const remoteGameManifestSchema = z.object({
   entryUrl: z.string().url(),
   bundleUrl: z.string().url(),
   assets: z.array(z.string().url()),
-  permissions: z.array(z.enum(["keyboard", "pointer"])),
+  permissions: z.array(z.enum(["keyboard", "pointer", "touch"])).default(["keyboard", "pointer"]),
+  supportedDevices: z.array(z.enum(["desktop", "mobile"])).default(["desktop"]),
+  inputMethods: z.array(z.enum(["keyboard", "pointer", "touch"])).default(["keyboard", "pointer"]),
+  orientation: z.enum(["portrait", "landscape", "any"]).default("any"),
   createdByJobId: z.string(),
   generatedAt: z.string()
 });

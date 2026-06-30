@@ -196,7 +196,10 @@ async function uploadBasicSeedAssets(game: SeedGame) {
     entryUrl: htmlUpload.url,
     bundleUrl: htmlUpload.url,
     assets: [coverUpload.url],
-    permissions: ["keyboard", "pointer"],
+    permissions: ["keyboard", "pointer", "touch"],
+    supportedDevices: ["desktop", "mobile"],
+    inputMethods: ["keyboard", "pointer", "touch"],
+    orientation: "any",
     createdByJobId: `seed-${game.slug}`,
     generatedAt: new Date().toISOString()
   };

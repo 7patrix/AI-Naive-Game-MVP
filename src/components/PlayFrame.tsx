@@ -30,6 +30,13 @@ async function reportPlayEvent(gameId: string, type: "PLAY_LOADED" | "PLAY_ERROR
   }
 }
 
+function formatPermission(permission: string) {
+  if (permission === "keyboard") return "键盘";
+  if (permission === "pointer") return "鼠标/点击";
+  if (permission === "touch") return "触控";
+  return permission;
+}
+
 export function PlayFrame({
   gameId,
   title,
@@ -118,6 +125,17 @@ export function PlayFrame({
     window.setTimeout(() => frameRef.current?.focus(), 0);
   }
 
+  function sendVirtualKey(key: string, phase: "keydown" | "keyup") {
+    frameRef.current?.contentWindow?.postMessage(
+      {
+        type: "AI_ARCADE_KEY",
+        phase,
+        key
+      },
+      "*"
+    );
+  }
+
   function resizeFrameToContent() {
     if (compact) {
       return;
@@ -178,13 +196,14 @@ export function PlayFrame({
 
   const showOverlay = state !== "loaded";
   const shouldRenderFrame = state !== "idle";
+  const supportsTouch = permissions.includes("touch");
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 shadow-sm">
       <div className="flex flex-col gap-2 border-b border-white/10 px-5 py-3 text-sm text-slate-200 md:flex-row md:items-center md:justify-between">
         <span>{title}</span>
         <div className="flex items-center gap-3">
-          {!compact ? <span>权限：{permissions.join("、")}</span> : null}
+          {!compact ? <span>操作：{permissions.map(formatPermission).join("、")}</span> : null}
           {state === "loaded" ? (
             <button
               className="rounded-lg border border-white/15 px-3 py-1 text-xs font-semibold text-white hover:bg-white/10"
@@ -252,7 +271,48 @@ export function PlayFrame({
         ) : (
           <div className="w-full bg-slate-950" style={{ height: frameHeight }} />
         )}
+        {supportsTouch && !compact && state === "loaded" ? (
+          <div className="absolute bottom-4 right-4 z-20 grid grid-cols-3 grid-rows-3 gap-2 select-none touch-none">
+            <TouchButton className="col-start-2 row-start-1" label="↑" onKey={sendVirtualKey} value="ArrowUp" />
+            <TouchButton className="col-start-1 row-start-2" label="←" onKey={sendVirtualKey} value="ArrowLeft" />
+            <TouchButton className="col-start-2 row-start-2 text-xs" label="重开" onKey={sendVirtualKey} value="r" />
+            <TouchButton className="col-start-3 row-start-2" label="→" onKey={sendVirtualKey} value="ArrowRight" />
+            <TouchButton className="col-start-2 row-start-3" label="↓" onKey={sendVirtualKey} value="ArrowDown" />
+          </div>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function TouchButton({
+  className,
+  label,
+  onKey,
+  value
+}: {
+  className: string;
+  label: string;
+  onKey: (key: string, phase: "keydown" | "keyup") => void;
+  value: string;
+}) {
+  return (
+    <button
+      className={`h-12 w-12 rounded-2xl border border-white/20 bg-indigo-500/80 text-base font-bold text-white shadow-lg shadow-slate-950/30 backdrop-blur transition active:bg-indigo-400 ${className}`}
+      onPointerCancel={() => onKey(value, "keyup")}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onKey(value, "keydown");
+      }}
+      onPointerLeave={() => onKey(value, "keyup")}
+      onPointerUp={(event) => {
+        event.preventDefault();
+        onKey(value, "keyup");
+      }}
+      type="button"
+    >
+      {label}
+    </button>
   );
 }

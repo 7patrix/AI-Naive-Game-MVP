@@ -463,6 +463,48 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
       .restart[hidden] {
         display: none;
       }
+      .touch-controls {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: repeat(3, 54px);
+        grid-template-rows: repeat(3, 54px);
+        gap: 8px;
+        touch-action: none;
+        user-select: none;
+      }
+      .touch-controls button {
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 18px;
+        background: rgba(79, 70, 229, 0.72);
+        color: #ffffff;
+        font: 800 20px system-ui;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32);
+      }
+      .touch-controls button:active {
+        background: rgba(99, 102, 241, 0.95);
+      }
+      .touch-up { grid-column: 2; grid-row: 1; }
+      .touch-left { grid-column: 1; grid-row: 2; }
+      .touch-action { grid-column: 2; grid-row: 2; font-size: 13px !important; }
+      .touch-right { grid-column: 3; grid-row: 2; }
+      .touch-down { grid-column: 2; grid-row: 3; }
+      @media (hover: hover) and (pointer: fine) {
+        .touch-controls {
+          opacity: 0.42;
+        }
+      }
+      @media (max-width: 640px) {
+        .hud {
+          left: 12px;
+          top: 12px;
+          right: 12px;
+          max-width: none;
+          padding: 12px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -470,10 +512,17 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
     <div class="hud">
       <h1>${title}</h1>
       <p>${coreLoop}</p>
-      <p>方向键 / WASD 移动，躲避陨石，存活越久分数越高。</p>
+      <p>方向键 / WASD 或屏幕按钮移动，躲避危险物，存活越久分数越高。</p>
       ${primaryImageAsset ? `<p>玩家角色使用上传素材：${escapeHtml(primaryImageAsset.filename)}</p>` : ""}
     </div>
     <button class="restart" id="restart" hidden>重新开始</button>
+    <div class="touch-controls" aria-label="触控方向按钮">
+      <button class="touch-up" data-key="ArrowUp" type="button">↑</button>
+      <button class="touch-left" data-key="ArrowLeft" type="button">←</button>
+      <button class="touch-action" data-key="r" type="button">重开</button>
+      <button class="touch-right" data-key="ArrowRight" type="button">→</button>
+      <button class="touch-down" data-key="ArrowDown" type="button">↓</button>
+    </div>
     <script>
       const promptSummary = ${prompt};
       const gameMode = ${fallbackMode};
@@ -531,6 +580,15 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
         target.ttl = 1600;
         restartButton.hidden = true;
         canvas.focus();
+      }
+
+      function setVirtualKey(key, pressed) {
+        if (!alive && pressed && key.toLowerCase() === "r") {
+          resetGame();
+          return;
+        }
+        if (pressed) keys.add(key);
+        else keys.delete(key);
       }
 
       function moveTarget(width, height) {
@@ -692,12 +750,23 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
         if (!event.data || event.data.type !== "AI_ARCADE_KEY") return;
         const key = event.data.key;
         if (typeof key !== "string") return;
-        if (!alive && event.data.phase === "keydown" && key.toLowerCase() === "r") {
-          resetGame();
-          return;
-        }
-        if (event.data.phase === "keydown") keys.add(key);
-        if (event.data.phase === "keyup") keys.delete(key);
+        if (event.data.phase === "keydown") setVirtualKey(key, true);
+        if (event.data.phase === "keyup") setVirtualKey(key, false);
+      });
+      document.querySelectorAll("[data-key]").forEach((button) => {
+        const key = button.getAttribute("data-key");
+        if (!key) return;
+        button.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          button.setPointerCapture?.(event.pointerId);
+          setVirtualKey(key, true);
+        });
+        button.addEventListener("pointerup", (event) => {
+          event.preventDefault();
+          setVirtualKey(key, false);
+        });
+        button.addEventListener("pointercancel", () => setVirtualKey(key, false));
+        button.addEventListener("pointerleave", () => setVirtualKey(key, false));
       });
       restartButton.addEventListener("click", resetGame);
       resize();
@@ -985,8 +1054,8 @@ async function runCoderAgent(job: Job, spec: GameSpec, assetAnalyses: AssetAnaly
   if (mode !== "fallback" && hasModelConfig(modelConfig)) {
     try {
       const html = await completeText(
-        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。",
-        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。`,
+        "你是 Web 游戏代码生成 Agent。只返回一个完整可运行的 HTML 文件。禁止外链脚本，禁止任意网络请求，使用内联 CSS/JS 和 Canvas。严禁生成 <input type=\"file\">、文件选择器、拖拽上传区或 FileReader；上传素材已经在 Create 阶段完成。允许且应该使用 AssetAnalyzerAgent 提供的上传素材 publicUrl 作为图片/音频等游戏素材；除这些素材 URL 外，不要加载其他外部资源。必须同时支持桌面端和手机端：桌面端支持键盘/WASD/鼠标，手机端支持触摸、点击、拖拽或屏幕按钮。不要只依赖键盘。必须监听 postMessage 的 AI_ARCADE_KEY 消息，让外层播放器的虚拟按钮也能控制游戏。",
+        `生成一个小游戏 HTML。游戏规格：${JSON.stringify(spec)}。用户原始创意：${job.prompt}。${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果用户提到“使用我上传的图像/素材”，必须直接使用素材 publicUrl 作为游戏里的角色、道具、背景或 UI 图像，并可缩放、裁剪、加光效。不要让玩家在游戏里再次上传文件。游戏内必须显示电脑端和手机端的操作提示，并在移动端提供可触控的操作方式。`,
         modelConfig
       );
       if (html.includes("<html") && html.includes("</html>")) {
@@ -1088,7 +1157,10 @@ async function runPublisherAgent(
     entryUrl: htmlUpload.url,
     bundleUrl: htmlUpload.url,
     assets: [coverUpload.url, ...runtimeAssetUrls],
-    permissions: ["keyboard", "pointer"],
+    permissions: ["keyboard", "pointer", "touch"],
+    supportedDevices: ["desktop", "mobile"],
+    inputMethods: ["keyboard", "pointer", "touch"],
+    orientation: "any",
     createdByJobId: job.id,
     generatedAt: new Date().toISOString()
   };
