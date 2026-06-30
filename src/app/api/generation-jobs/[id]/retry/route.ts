@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GenerationJobStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { enqueueGenerationJob } from "@/lib/queue";
 
 type RouteContext = {
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   const { id } = await params;
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login?next=/create", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/login?next=/create", env.APP_URL), { status: 303 });
   }
 
   const job = await db.generationJob.findFirst({
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   });
 
   if (!job || job.status !== GenerationJobStatus.FAILED) {
-    return NextResponse.redirect(new URL("/create?error=只能重试失败的生成任务。", request.url), {
+    return NextResponse.redirect(new URL("/create?error=只能重试失败的生成任务。", env.APP_URL), {
       status: 303
     });
   }
@@ -51,5 +52,5 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
   await enqueueGenerationJob(job.id);
 
-  return NextResponse.redirect(new URL(`/create?job=${job.id}`, request.url), { status: 303 });
+  return NextResponse.redirect(new URL(`/create?job=${job.id}`, env.APP_URL), { status: 303 });
 }

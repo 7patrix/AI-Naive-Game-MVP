@@ -3,6 +3,7 @@ import { ApiCredentialSource, ApiCredentialTestStatus, GameStatus, GenerationJob
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { enqueueGenerationJob } from "@/lib/queue";
 import { checkActiveJobQuota, checkPlatformQuota, checkUserKeyQuota } from "@/lib/quota";
 import { uploadObject } from "@/lib/storage";
@@ -35,8 +36,8 @@ function getSafeUploadKey(userId: string, jobId: string, file: File, index: numb
   return `uploads/${userId}/${jobId}/${Date.now()}-${index}${suffix}`;
 }
 
-function redirectWithError(request: NextRequest, error: string) {
-  const url = new URL("/create", request.url);
+function redirectWithError(error: string) {
+  const url = new URL("/create", env.APP_URL);
   url.searchParams.set("error", error);
   return NextResponse.redirect(url, { status: 303 });
 }
@@ -60,11 +61,11 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login?next=/create", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/login?next=/create", env.APP_URL), { status: 303 });
   }
 
   if (!user.emailVerifiedAt) {
-    const url = new URL("/verify-email", request.url);
+    const url = new URL("/verify-email", env.APP_URL);
     url.searchParams.set("email", user.email);
     return NextResponse.redirect(url, { status: 303 });
   }
@@ -77,13 +78,13 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return redirectWithError(request, parsed.error.issues[0]?.message ?? "请输入有效的游戏创意。");
+    return redirectWithError(parsed.error.issues[0]?.message ?? "请输入有效的游戏创意。");
   }
 
   const activeQuota = await checkActiveJobQuota(user.id);
 
   if (!activeQuota.ok) {
-    return redirectWithError(request, activeQuota.error ?? "当前生成任务过多，请稍后再试。");
+    return redirectWithError(activeQuota.error ?? "当前生成任务过多，请稍后再试。");
   }
 
   const files = formData
@@ -92,15 +93,15 @@ export async function POST(request: NextRequest) {
   const totalFileBytes = files.reduce((total, file) => total + file.size, 0);
 
   if (files.length > MAX_FILES) {
-    return redirectWithError(request, `资源限额：最多上传 ${MAX_FILES} 个文件。`);
+    return redirectWithError(`资源限额：最多上传 ${MAX_FILES} 个文件。`);
   }
 
   if (files.some((file) => file.size > MAX_FILE_SIZE_BYTES)) {
-    return redirectWithError(request, "资源限额：单个文件不能超过 10MB。");
+    return redirectWithError("资源限额：单个文件不能超过 10MB。");
   }
 
   if (totalFileBytes > MAX_TOTAL_FILE_BYTES) {
-    return redirectWithError(request, "资源限额：单次上传总大小不能超过 25MB。");
+    return redirectWithError("资源限额：单次上传总大小不能超过 25MB。");
   }
 
   const sourceGame = parsed.data.remixGameId
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     : null;
 
   if (parsed.data.remixGameId && !sourceGame) {
-    return redirectWithError(request, "无法 Remix：源游戏不存在或尚未发布。");
+    return redirectWithError("无法 Remix：源游戏不存在或尚未发布。");
   }
 
   const moderationReport = moderatePrompt(parsed.data.prompt);
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
     : null;
 
   if (requestedCredentialId && !apiCredential) {
-    return redirectWithError(request, "这条 API 配置不可用，请先在 API 管理中测试成功后再使用。");
+    return redirectWithError("这条 API 配置不可用，请先在 API 管理中测试成功后再使用。");
   }
   const source = apiCredential ? ApiCredentialSource.USER_KEY : ApiCredentialSource.PLATFORM;
   const quota = source === ApiCredentialSource.USER_KEY
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
     : await checkPlatformQuota(user.id);
 
   if (!quota.ok) {
-    return redirectWithError(request, quota.error ?? "当前额度不足，请稍后再试。");
+    return redirectWithError(quota.error ?? "当前额度不足，请稍后再试。");
   }
 
   const recentJobs = await db.generationJob.findMany({
@@ -182,7 +183,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (recentDuplicate) {
-    const url = new URL("/create", request.url);
+    const url = new URL("/create", env.APP_URL);
     url.searchParams.set("job", recentDuplicate.id);
     url.searchParams.set("error", "检测到重复提交，已切换到刚创建的任务。");
     return NextResponse.redirect(url, { status: 303 });
@@ -227,7 +228,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (isRejected) {
-    const url = new URL("/create", request.url);
+    const url = new URL("/create", env.APP_URL);
     url.searchParams.set("job", job.id);
     return NextResponse.redirect(url, { status: 303 });
   }
@@ -285,7 +286,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const url = new URL("/create", request.url);
+    const url = new URL("/create", env.APP_URL);
     url.searchParams.set("job", job.id);
     url.searchParams.set("error", "素材上传失败，请重命名文件或稍后重试。");
     return NextResponse.redirect(url, { status: 303 });
@@ -312,7 +313,7 @@ export async function POST(request: NextRequest) {
 
   await enqueueGenerationJob(job.id);
 
-  const url = new URL("/create", request.url);
+  const url = new URL("/create", env.APP_URL);
   url.searchParams.set("job", job.id);
   return NextResponse.redirect(url, { status: 303 });
 }
