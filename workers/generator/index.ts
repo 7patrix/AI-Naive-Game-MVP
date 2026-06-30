@@ -344,9 +344,93 @@ function analyzeTextMaterial(text: string): NonNullable<AssetAnalysis["textAnaly
   };
 }
 
+function buildTextMaterialExcerpt(text: string, maxLength = 12000) {
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  const sectionLength = Math.floor(maxLength / 3);
+  const head = text.slice(0, sectionLength);
+  const middleStart = Math.max(0, Math.floor(text.length / 2) - Math.floor(sectionLength / 2));
+  const middle = text.slice(middleStart, middleStart + sectionLength);
+  const tail = text.slice(-sectionLength);
+
+  return [
+    head,
+    "\n\n[...中间节选...]\n\n",
+    middle,
+    "\n\n[...结尾节选...]\n\n",
+    tail
+  ].join("");
+}
+
 function buildTitle(prompt: string) {
   const compact = prompt.replace(/\s+/g, "").slice(0, 18);
   return compact ? `AI 小游戏：${compact}` : "AI 生成小游戏";
+}
+
+function stringifySpecValue(value: unknown, fallback: string, maxLength = 1200): string {
+  if (typeof value === "string") {
+    return value.trim().slice(0, maxLength) || fallback;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).slice(0, maxLength);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => stringifySpecValue(item, "", 160))
+      .filter(Boolean)
+      .join("；")
+      .slice(0, maxLength) || fallback;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const likelyText = [
+      record.summary,
+      record.text,
+      record.content,
+      record.description,
+      record.overview,
+      record.story
+    ]
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+      .join(" ");
+
+    if (likelyText) {
+      return likelyText.slice(0, maxLength);
+    }
+
+    return JSON.stringify(value).slice(0, maxLength);
+  }
+
+  return fallback;
+}
+
+function normalizeTags(value: unknown, fallback: string[]): string[] {
+  const rawTags = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[，,、\s]+/) : fallback;
+  const tags = rawTags
+    .map((item) => stringifySpecValue(item, "", 24))
+    .map((item) => item.replace(/^#/, "").trim())
+    .filter(Boolean);
+
+  return [...new Set(tags)].slice(0, 8);
+}
+
+function normalizeGameSpec(value: unknown, fallback: GameSpec): GameSpec {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+  return {
+    title: stringifySpecValue(record.title, fallback.title, 60),
+    genre: stringifySpecValue(record.genre, fallback.genre, 40),
+    coreLoop: stringifySpecValue(record.coreLoop, fallback.coreLoop, 600),
+    promptSummary: stringifySpecValue(record.promptSummary, fallback.promptSummary, 600),
+    description: stringifySpecValue(record.description, fallback.description, 1600),
+    tags: normalizeTags(record.tags, fallback.tags)
+  };
 }
 
 function buildSlug(title: string, jobId: string) {
@@ -1005,14 +1089,15 @@ async function analyzeAsset(asset: InputAsset, modelConfig: JobModelConfig): Pro
   if (kind === "text") {
     try {
       const response = await fetch(asset.publicUrl, { cache: "no-store" });
-      const text = (await response.text()).slice(0, 8000);
+      const rawText = await response.text();
+      const text = buildTextMaterialExcerpt(rawText);
       const textAnalysis = analyzeTextMaterial(text);
 
       return {
         ...base,
         textPreview: text,
         textAnalysis,
-        summary: `用户上传了文本素材《${asset.filename}》，已提取前 ${text.length} 个字符作为参考内容。文档类型判断：${textAnalysis.documentType}。`
+        summary: `用户上传了文本素材《${asset.filename}》，原文约 ${rawText.length} 个字符，已提取 ${text.length} 个代表性字符作为参考内容。文档类型判断：${textAnalysis.documentType}。`
       };
     } catch {
       return {
@@ -1110,16 +1195,18 @@ function validateGeneratedHtml(html: string, assetAnalyses: AssetAnalysis[]) {
 
 async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[], modelConfig: JobModelConfig) {
   let source: "llm" | "fallback" = "fallback";
-  let spec: GameSpec = buildFallbackSpec(job.prompt);
+  const fallbackSpec = buildFallbackSpec(job.prompt);
+  let spec: GameSpec = normalizeGameSpec(fallbackSpec, fallbackSpec);
   const assetContext = buildAssetContext(assetAnalyses);
 
   if (hasModelConfig(modelConfig)) {
     try {
-      spec = await completeJson<GameSpec>(
+      const modelSpec = await completeJson<unknown>(
         "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。若上传素材包含文本/剧本/规则文档，必须优先根据文本里的角色、世界观、玩法规则、场景、台词和分支来设计游戏，而不是只根据用户一句 prompt 发散。",
         `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果文本素材像 galgame、视觉小说、剧情脚本或角色设定，请生成包含对话、选择分支、好感度/结局或章节推进的轻量互动游戏规格。如果文本素材像玩法规则文档，请提炼胜负条件、操作方式、关卡目标和计分规则。如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、剧情台词、关卡规则或 UI 参考。`,
         modelConfig
       );
+      spec = normalizeGameSpec(modelSpec, fallbackSpec);
       source = "llm";
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown";

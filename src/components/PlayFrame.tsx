@@ -77,6 +77,7 @@ export function PlayFrame({
   const hasReported = useRef(false);
   const virtualMoveKeys = useRef<Set<string>>(new Set());
   const [measuredHeight, setMeasuredHeight] = useState<string | null>(null);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const frameHeight = measuredHeight ?? (typeof height === "number" ? `${height}px` : height);
 
   useEffect(() => {
@@ -103,6 +104,15 @@ export function PlayFrame({
 
     return () => window.clearTimeout(timeout);
   }, [entryUrl, gameId, manifestUrl, reportTelemetry, runId, state]);
+
+  useEffect(() => {
+    if (state !== "loaded" || compact || !permissions.includes("touch")) {
+      return;
+    }
+
+    const shouldOpen = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
+    setControlsOpen(shouldOpen);
+  }, [compact, permissions, state, runId]);
 
   useEffect(() => {
     if (state !== "loaded") {
@@ -365,7 +375,19 @@ export function PlayFrame({
           <div className="w-full bg-slate-950" style={{ height: frameHeight }} />
         )}
         {supportsTouch && !compact && state === "loaded" ? (
-          <VirtualControls onAction={sendAction} onMove={sendMove} />
+          <VirtualControls
+            isOpen={controlsOpen}
+            onAction={sendAction}
+            onMove={sendMove}
+            onToggle={() => {
+              setControlsOpen((current) => {
+                if (current) {
+                  sendMove(0, 0, false);
+                }
+                return !current;
+              });
+            }}
+          />
         ) : null}
       </div>
     </section>
@@ -373,18 +395,35 @@ export function PlayFrame({
 }
 
 function VirtualControls({
+  isOpen,
   onAction,
-  onMove
+  onMove,
+  onToggle
 }: {
+  isOpen: boolean;
   onAction: (name: "primary" | "restart", pressed: boolean) => void;
   onMove: (x: number, y: number, active: boolean) => void;
+  onToggle: () => void;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex items-end justify-between px-4 select-none">
-      <VirtualJoystick onMove={onMove} />
-      <div className="pointer-events-auto flex flex-col items-end gap-3">
-        <ActionButton label="动作" onAction={onAction} value="primary" />
-        <ActionButton label="重开" onAction={onAction} value="restart" />
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 px-4 select-none">
+      <div className="flex items-end justify-between">
+        {isOpen ? <VirtualJoystick onMove={onMove} /> : <div />}
+        <div className="pointer-events-auto flex flex-col items-end gap-2">
+          <button
+            className="rounded-full border border-white/15 bg-slate-950/35 px-3 py-2 text-xs font-semibold text-white/80 shadow-lg backdrop-blur transition hover:bg-slate-950/55"
+            onClick={onToggle}
+            type="button"
+          >
+            {isOpen ? "收起控制" : "触控"}
+          </button>
+          {isOpen ? (
+            <div className="flex flex-col items-end gap-2 opacity-55 transition hover:opacity-95 active:opacity-95">
+              <ActionButton label="动作" onAction={onAction} value="primary" />
+              <ActionButton label="重开" onAction={onAction} value="restart" />
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -417,7 +456,7 @@ function VirtualJoystick({ onMove }: { onMove: (x: number, y: number, active: bo
 
   return (
     <div
-      className="pointer-events-auto relative h-28 w-28 rounded-full border border-white/20 bg-slate-950/55 shadow-xl shadow-slate-950/40 backdrop-blur touch-none"
+      className="pointer-events-auto relative h-24 w-24 rounded-full border border-white/15 bg-slate-950/25 opacity-50 shadow-xl shadow-slate-950/30 backdrop-blur transition hover:opacity-90 active:opacity-95 touch-none"
       onPointerCancel={resetStick}
       onPointerDown={(event) => {
         event.preventDefault();
@@ -439,7 +478,7 @@ function VirtualJoystick({ onMove }: { onMove: (x: number, y: number, active: bo
       <div
         className="absolute left-1/2 top-1/2 h-12 w-12 rounded-full bg-indigo-400/90 shadow-lg shadow-indigo-950/40"
         style={{
-          transform: `translate(calc(-50% + ${stick.x * 36}px), calc(-50% + ${stick.y * 36}px))`
+          transform: `translate(calc(-50% + ${stick.x * 30}px), calc(-50% + ${stick.y * 30}px))`
         }}
       />
       <span className="absolute inset-x-0 bottom-2 text-center text-[10px] font-semibold text-white/70">移动</span>
@@ -458,7 +497,7 @@ function ActionButton({
 }) {
   return (
     <button
-      className="h-14 min-w-14 rounded-2xl border border-white/20 bg-indigo-500/85 px-4 text-sm font-bold text-white shadow-lg shadow-slate-950/30 backdrop-blur transition active:bg-indigo-400"
+      className="h-12 min-w-12 rounded-2xl border border-white/15 bg-indigo-500/65 px-3 text-xs font-bold text-white shadow-lg shadow-slate-950/25 backdrop-blur transition active:bg-indigo-400"
       onPointerCancel={() => onAction(value, false)}
       onPointerDown={(event) => {
         event.preventDefault();
