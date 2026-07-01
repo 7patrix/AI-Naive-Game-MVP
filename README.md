@@ -1,33 +1,128 @@
-# AI 游戏工坊 MVP
+# AI 游戏工坊
 
-AI 游戏工坊是一个 AI Native 互动游戏 Web 平台 MVP，用于演示从登录注册、创意输入、异步 Agent 生成、对象存储发布，到首页浏览和远端游玩的完整业务闭环。
+AI 游戏工坊是一个面向创作者的 AI Native 互动小游戏平台。用户可以用自然语言描述玩法，上传图片、文本设定或其他素材，系统会异步生成可在线游玩的 HTML 小游戏，并支持发布、浏览、Remix、点赞收藏、举报和个人主页展示。
 
-核心链路：
+线上域名：
 
 ```text
-注册/登录 -> Create 输入创意 -> Worker 执行 Agent 流水线
--> 生成 HTML/Manifest/封面 -> 上传 MinIO -> Game meta 入库
--> Home 展示 -> Detail 查看 -> Play 动态加载远端游戏
+https://duckmole.site
 ```
 
-## 技术栈
+> 当前域名处于 ICP 备案流程时可能会临时暂停 DNS 解析；代码与部署仍然通过 GitHub + Railway 持续更新。
 
-- 前端/后端：Next.js App Router、React、TypeScript
-- 样式：Tailwind CSS
-- 数据库：PostgreSQL + Prisma
-- 对象存储：MinIO，S3 兼容协议
-- 异步任务：Node.js Worker
-- Agent 编排：LangGraph `StateGraph`
-- 游戏运行隔离：iframe sandbox
+## 产品能力
 
-## 本地启动
+- **AI 生成小游戏**：输入创意和素材，生成可直接游玩的 Web Canvas/HTML 游戏。
+- **多模态素材输入**：支持图片、文本、视频、音频、文档等上传；文本素材会被分析为角色、规则、场景、台词、分支等结构。
+- **长文本创作支持**：长篇 txt 会抽取开头、中段和结尾，保留设定、剧情推进和结局信息，适合 galgame、视觉小说、规则文档和剧情脚本。
+- **跨设备游玩**：新生成游戏支持桌面键盘/鼠标与手机触控；播放器提供统一 `AI_ARCADE_INPUT` 输入协议、虚拟摇杆和动作按钮。
+- **作品发布与游玩**：生成后的游戏会上传到对象存储，进入首页、详情页和 Play 页，使用 iframe sandbox 隔离运行。
+- **账号与安全**：邮箱注册、邮箱验证、登录/退出、忘记密码、重置密码、GitHub/Google OAuth。
+- **创作者社区**：用户资料页、头像上传、公开主页、创作者榜、作者主页跳转。
+- **互动与治理**：点赞、收藏、举报、管理后台、内容下架/恢复、任务删除、审计日志。
+- **API 管理与额度**：用户可以配置自己的 OpenAI-compatible API Key；生成任务可选择平台额度或自带 API，并记录成本来源。
+- **后台运维**：管理后台展示游戏、举报、生成任务、用户用量、任务来源和失败原因。
+
+## 核心流程
+
+```text
+登录/注册
+-> Create 输入创意和上传素材
+-> GenerationJob 入库
+-> BullMQ 入队
+-> Worker 执行 LangGraph 生成流水线
+-> 生成 HTML / manifest / cover
+-> 上传 S3-compatible 对象存储
+-> Game 入库并发布
+-> Home / Detail / Play 在线游玩
+```
+
+## 技术架构
+
+- **前端/后端**：Next.js App Router + React + TypeScript
+- **样式**：Tailwind CSS
+- **数据库**：PostgreSQL + Prisma
+- **队列**：Redis + BullMQ
+- **Worker**：Node.js + `tsx`
+- **Agent 编排**：LangGraph `StateGraph`
+- **模型接口**：OpenAI-compatible API，支持 `chat` / `responses` / vision
+- **对象存储**：MinIO（本地）/ Supabase Storage S3-compatible（线上）/ 其他 S3-compatible provider
+- **邮件服务**：Resend
+- **运行隔离**：iframe sandbox
+- **部署**：Railway Web + Railway Worker + Railway Postgres/Redis + Supabase Storage
+
+## Agent 流水线
+
+生成任务由 Worker 异步处理，主要阶段包括：
+
+- `AssetAnalyzerAgent`：解析上传素材，读取图片尺寸、文本内容和视觉摘要。
+- `PlannerAgent`：将创意和素材整理成游戏规格。
+- `CoderAgent`：生成单文件 HTML 游戏。
+- `ReviewerAgent`：检查基础安全规则，阻止外链脚本和游戏内文件上传。
+- `PublisherAgent`：上传 HTML、manifest、封面并创建游戏记录。
+- `CostAgent`：记录 token 和估算成本。
+
+每个阶段会写入 `AgentLog` 和 `JobArtifact`，方便后台排查和回放。
+
+## 线上部署说明
+
+线上使用 Railway 拆分为两个服务：
+
+```text
+Web    -> npm run start
+Worker -> npm run worker
+```
+
+Web 负责页面和 API，Worker 负责消费生成队列。只部署 Web 不部署 Worker 时，Create 任务会停在 `PENDING / 0%`。
+
+线上关键环境变量：
+
+```env
+APP_URL="https://duckmole.site"
+AUTH_COOKIE_NAME="ai_arcade_session"
+AUTH_SECRET="replace-with-production-random-secret"
+ADMIN_EMAILS="admin@example.com"
+
+DATABASE_URL="..."
+REDIS_URL="..."
+
+OPENAI_API_KEY="..."
+OPENAI_BASE_URL="https://api.openai.com/v1"
+MODEL_NAME="gpt-5.5"
+MODEL_WIRE_API="chat"
+
+S3_ENDPOINT="..."
+S3_INTERNAL_ENDPOINT="..."
+S3_REGION="us-east-1"
+S3_ACCESS_KEY_ID="..."
+S3_SECRET_ACCESS_KEY="..."
+S3_BUCKET="Game"
+S3_FORCE_PATH_STYLE="true"
+S3_PUBLIC_BASE_URL="..."
+
+RESEND_API_KEY="re_..."
+EMAIL_FROM="AI 游戏工坊 <noreply@your-domain.com>"
+EMAIL_VERIFICATION_TOKEN_TTL_MINUTES="60"
+
+API_KEY_ENCRYPTION_SECRET="replace-with-stable-random-secret"
+```
+
+`API_KEY_ENCRYPTION_SECRET` 用于加密用户自带 API Key。生产环境一旦保存过用户 API Key，就不要随意更换这个值，否则旧 key 将无法解密。
+
+数据库变更上线后执行：
+
+```bash
+npm run db:deploy
+```
+
+## 本地开发
 
 前置依赖：
 
 - Node.js + npm
 - Docker Desktop + Docker Compose
 
-启动数据库和对象存储：
+启动本地依赖：
 
 ```bash
 cp .env.example .env
@@ -38,15 +133,13 @@ npm run db:migrate
 npm run db:seed
 ```
 
-`db:seed` 会创建测试账号、3 个基础 seed 示例游戏，以及 1 个由 Create 流程生成后固化下来的 AI 游戏样例。seed 脚本会把这些示例游戏的 `index.html`、`manifest.json`、`cover.svg` 和示例图片素材上传到 MinIO，因此 clone 仓库后完成 seed 即可直接在首页看到可 Play 的示例游戏。
-
 启动 Web：
 
 ```bash
 npm run dev
 ```
 
-另开一个终端启动 Worker：
+另开终端启动 Worker：
 
 ```bash
 npm run worker
@@ -54,112 +147,41 @@ npm run worker
 
 访问地址：
 
-- Web 应用：http://localhost:3000
-- MinIO 控制台：http://localhost:9001
+- Web：http://localhost:3000
+- MinIO Console：http://localhost:9001
 
-MinIO 默认账号：
-
-```text
-用户名：minioadmin
-密码：minioadmin
-```
-
-测试账号：
+本地测试账号：
 
 ```text
 邮箱：creator@example.com
 密码：Password123!
 ```
 
-## 演示步骤
-
-1. 打开 `http://localhost:3000`，查看首页已发布游戏。
-2. 使用测试账号登录。
-3. 进入 `/create`，输入一个小游戏创意。
-4. 提交后查看 `GenerationJob` 状态、进度和 Agent 日志。
-5. 等 Worker 处理完成后，回到首页查看新生成游戏。
-6. 进入游戏详情页，确认 Manifest 地址和游戏 meta。
-7. 点击“开始游玩”，Play 页会读取远端 Manifest，并用 iframe sandbox 加载 MinIO 中的远端 HTML 游戏。
-
-示例 prompt：
-
-```text
-做一个霓虹太空飞船躲避陨石的小游戏，玩家用方向键移动飞船，碰到陨石就失败，分数随着存活时间增长。
-```
-
-## 已实现功能
-
-- 邮箱注册、邮箱登录、退出登录
-- 密码 hash 存储和 session cookie
-- 受保护 Create 页面
-- Home 展示已发布游戏
-- Game Detail 页面
-- Create 生成任务
-- 多文件上传到 MinIO
-- Worker 异步处理任务
-- LangGraph 编排 AssetAnalyzer/Planner/Coder/Reviewer/Publisher/CostAgent
-- Planner/Coder/Reviewer/Publisher Agent 日志
-- 生成 HTML Canvas 小游戏
-- 生成并上传 `manifest.json`
-- 创建 `PUBLISHED` Game 记录
-- Play 页远端 Manifest 加载
-- iframe sandbox 动态运行远端游戏
-- `GameEvent` 埋点和 `playCount`
-- Home 搜索、标签筛选、排序
-- 游戏点赞和收藏
-- 游戏举报、管理员后台、下架/恢复发布和审计日志
-- 生成任务自动刷新和失败重试
-- 详情页展示游玩埋点统计
-- 可配置 Google / GitHub OAuth 登录
-- OpenAI-compatible LLM 可选接入，失败自动 fallback
-
-## 当前取舍
-
-当前 MVP 默认使用本地 fallback generator 生成 Canvas HTML 小游戏。fallback 会根据 prompt 关键词选择躲避、收集、点击反应、追逐等不同玩法模板，避免所有生成结果都是固定假数据。配置 `OPENAI_API_KEY` 后，`PlannerAgent` 和 `CoderAgent` 会优先调用 OpenAI-compatible Chat Completions API；如果没有 Key 或调用失败，会自动回退到本地生成器。
-
-系统已经预留真实模型接入点：
-
-```text
-OPENAI_API_KEY=""
-OPENAI_BASE_URL="https://api.openai.com/v1"
-MODEL_NAME="gpt-5.5"
-MODEL_WIRE_API="chat"
-OUTBOUND_PROXY_URL="http://127.0.0.1:7897"
-```
-
-`OPENAI_BASE_URL` 可替换为任意 OpenAI-compatible 服务地址。飞书提供的 GPT 5.5 接入文档使用 `OPENAI_BASE_URL="http://43.106.115.130:8080/v1"` 和 `MODEL_WIRE_API="responses"`。`OUTBOUND_PROXY_URL` 可选，本地网络需要代理访问模型服务或 GitHub OAuth 时再配置。模型调用成功时 AgentLog 会标记 `source: llm`；失败时会写入 `llm_fallback` 并继续使用本地 generator，保留任务、日志、对象存储、Manifest 和 Play 运行协议。
-
-Google / GitHub OAuth 是可选能力。两者共用 `OAuthAccount(provider, providerAccountId)` 数据模型；配置对应变量后，登录页的第三方登录可以真实跑通：
-
-```text
-GOOGLE_CLIENT_ID=""
-GOOGLE_CLIENT_SECRET=""
-GOOGLE_REDIRECT_URI="http://localhost:3000/api/auth/google/callback"
-
-GITHUB_CLIENT_ID=""
-GITHUB_CLIENT_SECRET=""
-GITHUB_REDIRECT_URI="http://localhost:3000/api/auth/github/callback"
-```
-
-## 文档
-
-- [文档总览与交付索引](docs/index.md)
-- [系统设计](docs/system-design.md)
-- [核心接口](docs/api.md)
-- [Agent 工作流](docs/agent-workflow.md)
-- [安全方案](docs/security.md)
-- [完成度说明](docs/completion-report.md)
-- [测试与验证](docs/verification.md)
-- [线上部署方案](docs/deployment.md)
-- [AI 协作记录](docs/ai-collaboration.md)
-
 ## 常用命令
 
 ```bash
 npm run typecheck
+npm run build
 npm run db:generate
 npm run db:migrate
+npm run db:deploy
 npm run db:seed
 npm run dev
 npm run worker
 ```
+
+## 目录结构
+
+```text
+src/app/                  Next.js App Router 页面和 API
+src/components/           播放器等通用组件
+src/lib/                  auth、db、storage、queue、model client 等基础设施
+workers/generator/        BullMQ Worker + LangGraph 生成流水线
+prisma/                   Prisma schema、migration、seed
+docs/                     架构、接口、部署和验证文档
+public/                   静态文件和站点验证文件
+```
+
+## 当前状态
+
+项目已经进入线上产品化阶段，支持真实域名、邮箱验证、OAuth、对象存储、异步生成、用户资料、API 管理、管理后台和跨设备游玩。后续可继续扩展订阅计费、套餐额度、用户关系、内容审核队列和更完整的数据看板。
