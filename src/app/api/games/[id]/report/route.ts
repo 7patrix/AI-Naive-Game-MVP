@@ -3,6 +3,7 @@ import { GameStatus } from "@prisma/client";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 
 type GameReportRouteProps = {
   params: Promise<{
@@ -37,11 +38,11 @@ export async function POST(request: NextRequest, { params }: GameReportRouteProp
   });
 
   if (!game) {
-    return NextResponse.redirect(new URL("/", request.url), { status: 303 });
+    return NextResponse.redirect(new URL("/", env.APP_URL), { status: 303 });
   }
 
   if (!parsed.success) {
-    return NextResponse.redirect(new URL(`/games/${game.slug}?reportError=1`, request.url), { status: 303 });
+    return NextResponse.redirect(new URL(`/games/${game.slug}?reportError=1`, env.APP_URL), { status: 303 });
   }
 
   await db.gameReport.create({
@@ -53,5 +54,5 @@ export async function POST(request: NextRequest, { params }: GameReportRouteProp
     }
   });
 
-  return NextResponse.redirect(new URL(`/games/${game.slug}?reported=1`, request.url), { status: 303 });
+  return NextResponse.redirect(new URL(`/games/${game.slug}?reported=1`, env.APP_URL), { status: 303 });
 }
