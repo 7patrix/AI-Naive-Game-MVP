@@ -57,6 +57,16 @@ export default async function RootLayout({
           </nav>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+        <footer className="mx-auto max-w-6xl px-6 pb-8 text-center text-xs text-slate-500">
+          <a
+            className="transition hover:text-indigo-700"
+            href="https://beian.miit.gov.cn/"
+            rel="noreferrer"
+            target="_blank"
+          >
+            浙ICP备2026051458号-1
+          </a>
+        </footer>
       </body>
     </html>
   );
