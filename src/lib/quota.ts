@@ -1,5 +1,6 @@
 import { ApiCredentialSource, GenerationJobStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 
 const MAX_ACTIVE_JOBS = 2;
 const DEFAULT_PLATFORM_DAILY_JOBS = 2;
@@ -67,6 +68,22 @@ export async function checkPlatformQuota(userId: string): Promise<QuotaResult> {
 
   if ((costToday._sum.estimatedCostCents ?? 0) >= dailyCostLimit) {
     return { ok: false, error: `平台额度：24 小时估算成本已达到上限，请使用自己的 API 或稍后再试。` };
+  }
+
+  const platformTotalCost = await db.generationJob.aggregate({
+    where: {
+      apiCredentialSource: ApiCredentialSource.PLATFORM,
+      createdAt: {
+        gte: since24h
+      }
+    },
+    _sum: {
+      estimatedCostCents: true
+    }
+  });
+
+  if ((platformTotalCost._sum.estimatedCostCents ?? 0) >= env.PLATFORM_DAILY_TOTAL_COST_LIMIT_CENTS) {
+    return { ok: false, error: `平台今日额度已用完，请使用自己的 API 配置，或明天再试。` };
   }
 
   return { ok: true };

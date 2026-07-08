@@ -52,6 +52,8 @@ const envSchema = z.object({
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   MODEL_NAME: z.string().default("gpt-5.5"),
   MODEL_WIRE_API: z.enum(["chat", "responses"]).default("chat"),
+  GENERATION_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
+  PLATFORM_DAILY_TOTAL_COST_LIMIT_CENTS: z.coerce.number().int().positive().default(500),
   OUTBOUND_PROXY_URL: z.string().url().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default("AI Native Game <onboarding@resend.dev>"),

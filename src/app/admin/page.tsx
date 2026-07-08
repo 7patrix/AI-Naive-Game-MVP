@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { ApiCredentialSource, GameReportStatus, GameStatus, GenerationJobStatus } from "@prisma/client";
 import { requireAdminUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
+import { getGenerationQueueCounts } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +85,27 @@ export default async function AdminPage() {
     ])
   ]);
   const [publishedCount, archivedCount, openReportCount, failedJobCount] = counts;
+  const stuckCutoff = new Date(Date.now() - env.GENERATION_JOB_TIMEOUT_MS);
+  const [queueCounts, jobStatusGroups, stuckJobCount] = await Promise.all([
+    getGenerationQueueCounts(),
+    db.generationJob.groupBy({
+      by: ["status"],
+      _count: { status: true }
+    }),
+    db.generationJob.count({
+      where: {
+        status: GenerationJobStatus.RUNNING,
+        startedAt: { lt: stuckCutoff }
+      }
+    })
+  ]);
+  const jobStatusCounts = jobStatusGroups.reduce(
+    (acc, group) => {
+      acc[group.status] = group._count.status;
+      return acc;
+    },
+    {} as Partial<Record<GenerationJobStatus, number>>
+  );
   const usageByUser = Array.from(
     usageJobs.reduce((map, job) => {
       const current = map.get(job.userId) ?? {
@@ -131,6 +154,46 @@ export default async function AdminPage() {
           <MetricCard label="已下架游戏" value={archivedCount} />
           <MetricCard label="待处理举报" value={openReportCount} />
           <MetricCard label="失败任务" value={failedJobCount} />
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="flex flex-col justify-between gap-2 md:flex-row md:items-end">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-950">队列状态</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              监控生成队列和任务健康度。卡住任务数大于 0 时需要检查 Worker 是否正常。
+            </p>
+          </div>
+          {stuckJobCount > 0 ? (
+            <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+              卡住任务：{stuckJobCount}
+            </span>
+          ) : (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              运行正常
+            </span>
+          )}
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-4">
+          <QueueMetric label="等待处理" value={jobStatusCounts.PENDING ?? 0} />
+          <QueueMetric label="运行中" value={jobStatusCounts.RUNNING ?? 0} />
+          <QueueMetric label="已完成" value={jobStatusCounts.SUCCEEDED ?? 0} />
+          <QueueMetric label="失败" value={jobStatusCounts.FAILED ?? 0} />
+        </div>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+          {queueCounts ? (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+              <QueueBadge label="waiting" value={queueCounts.waiting} />
+              <QueueBadge label="active" value={queueCounts.active} />
+              <QueueBadge label="delayed" value={queueCounts.delayed} />
+              <QueueBadge label="failed" value={queueCounts.failed} />
+              <QueueBadge label="completed" value={queueCounts.completed} />
+              <QueueBadge label="paused" value={queueCounts.paused} />
+            </div>
+          ) : (
+            <p className="text-red-600">队列状态读取失败，请检查 Redis 连接。</p>
+          )}
         </div>
       </section>
 
@@ -347,6 +410,24 @@ function MetricCard({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-white/10 bg-white/10 p-5 text-white backdrop-blur">
       <p className="text-sm text-slate-300">{label}</p>
       <p className="mt-2 text-3xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function QueueMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function QueueBadge({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2">
+      <span className="font-mono text-xs text-slate-500">{label}</span>
+      <span className="text-sm font-semibold text-slate-900">{value}</span>
     </div>
   );
 }

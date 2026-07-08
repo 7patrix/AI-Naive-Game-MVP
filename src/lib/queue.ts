@@ -56,3 +56,37 @@ export async function enqueueGenerationJob(jobId: string) {
     }
   );
 }
+
+export type GenerationQueueCounts = {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  completed: number;
+  paused: number;
+};
+
+export async function getGenerationQueueCounts(): Promise<GenerationQueueCounts | null> {
+  try {
+    const counts = await getGenerationQueue().getJobCounts(
+      "waiting",
+      "active",
+      "delayed",
+      "failed",
+      "completed",
+      "paused"
+    );
+
+    return {
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      delayed: counts.delayed ?? 0,
+      failed: counts.failed ?? 0,
+      completed: counts.completed ?? 0,
+      paused: counts.paused ?? 0
+    };
+  } catch (error) {
+    console.error("Failed to read generation queue counts", error);
+    return null;
+  }
+}

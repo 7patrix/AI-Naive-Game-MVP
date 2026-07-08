@@ -26,7 +26,7 @@ Browser
 - Queue：Railway Redis / Upstash Redis
 - Object Storage：Cloudflare R2 / AWS S3 / 阿里云 OSS / 腾讯云 COS
 - OAuth：GitHub / Google OAuth App，回调地址改为线上域名
-- Model：飞书 GPT 5.5 API 或其他 OpenAI-compatible provider
+- Model：OpenAI GPT-5.5 或其他 OpenAI-compatible provider
 
 ## 为什么 Worker 要单独部署
 
@@ -58,6 +58,18 @@ ADMIN_EMAILS="admin@example.com,creator@example.com"
 ```
 
 `AUTH_SECRET` 应使用生产随机值，长度至少 16 位，建议使用 32 位以上随机字符串。
+
+### Email Verification
+
+邮箱密码注册会发送验证链接，未验证邮箱不能进入 Create 或提交生成任务。生产环境需要配置 Resend：
+
+```env
+RESEND_API_KEY="re_..."
+EMAIL_FROM="AI Native Game <noreply@your-domain.com>"
+EMAIL_VERIFICATION_TOKEN_TTL_MINUTES="60"
+```
+
+`EMAIL_FROM` 必须使用 Resend 已验证域名或 Resend 允许的发件人。本地开发可以不配置 `RESEND_API_KEY`，服务端日志会输出验证链接；生产环境不配置时会拒绝发送验证邮件。
 
 ### Database
 
@@ -107,13 +119,13 @@ S3_PUBLIC_BASE_URL="https://<public-bucket-domain>/ai-arcade"
 
 ### Model API
 
-飞书 GPT 5.5 示例：
+OpenAI-compatible 模型服务示例：
 
 ```env
 OPENAI_API_KEY="..."
-OPENAI_BASE_URL="http://43.106.115.130:8080/v1"
+OPENAI_BASE_URL="https://api.openai.com/v1"
 MODEL_NAME="gpt-5.5"
-MODEL_WIRE_API="responses"
+MODEL_WIRE_API="chat"
 ```
 
 如果线上环境访问模型 API 不需要代理，可以不配置：
@@ -127,6 +139,15 @@ OUTBOUND_PROXY_URL=""
 ```env
 OUTBOUND_PROXY_URL="http://proxy-host:port"
 ```
+
+### 生成任务与成本护栏
+
+```env
+GENERATION_JOB_TIMEOUT_MS="300000"
+PLATFORM_DAILY_TOTAL_COST_LIMIT_CENTS="500"
+```
+
+`GENERATION_JOB_TIMEOUT_MS` 控制单个生成任务的超时时间，超时后任务标记为失败并释放 Worker；Worker 也会定期清理超时仍处于 RUNNING 的孤儿任务。`PLATFORM_DAILY_TOTAL_COST_LIMIT_CENTS` 是全平台每日估算成本上限，达到后平台额度暂停，用户仍可使用自带 API。两者都要在 Web 和 Worker 服务保持一致。
 
 ### OAuth
 
@@ -247,7 +268,7 @@ https://your-demo-domain.com/api/auth/google/callback
 
 1. 访问 `/api/health`，确认 database 和 redis 都是 `ok`。
 2. 打开首页，能看到 seed 游戏。
-3. 邮箱注册 / 登录。
+3. 邮箱注册，查收验证邮件并点击验证链接，然后登录。
 4. GitHub OAuth 或 Google OAuth。
 5. 进入 Create，提交 prompt 和图片。
 6. Worker 处理任务，任务从 `PENDING` 到 `SUCCEEDED`。
@@ -343,7 +364,7 @@ localhost:3000
 
 如果流量增加，可演进为：
 
-- Redis + BullMQ 替代数据库轮询
+- 更完善的队列监控、失败告警和自动扩缩容
 - Worker 横向扩容
 - 对象存储 CDN
 - 更严格的 HTML 静态扫描

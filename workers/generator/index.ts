@@ -13,6 +13,7 @@ import {
   type ModelClientConfig
 } from "../../src/lib/model-client";
 import { decryptApiKey } from "../../src/lib/api-credential-crypto";
+import { env } from "../../src/lib/env";
 import {
   GENERATION_JOB_NAME,
   GENERATION_QUEUE_NAME,
@@ -22,6 +23,31 @@ import {
 import { uploadObject } from "../../src/lib/storage";
 
 const prisma = new PrismaClient();
+const GENERATION_JOB_TIMEOUT_MS = env.GENERATION_JOB_TIMEOUT_MS;
+const STUCK_JOB_SWEEP_INTERVAL_MS = 60000;
+
+class GenerationTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`生成超时（超过 ${Math.round(timeoutMs / 60000)} 分钟），已自动结束，请重试或简化创意与素材。`);
+    this.name = "GenerationTimeoutError";
+  }
+}
+
+function runWithTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new GenerationTimeoutError(timeoutMs)), timeoutMs);
+    task.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 type Job = NonNullable<Awaited<ReturnType<typeof claimJob>>>;
 type JobModelConfig = ModelClientConfig | null;
@@ -1616,7 +1642,7 @@ async function runClaimedJob(job: Job) {
       }
     );
     const graph = createGenerationGraph();
-    const result = await graph.invoke({ job, modelConfig });
+    const result = await runWithTimeout(graph.invoke({ job, modelConfig }), GENERATION_JOB_TIMEOUT_MS);
 
     if (!result.spec || !result.bundlePlan || !result.reviewReport || !result.publishResult || !result.costEstimate) {
       throw new Error("LangGraph generation finished with incomplete state.");
@@ -1706,25 +1732,66 @@ const generationWorker = new BullWorker<GenerationQueuePayload, void, typeof GEN
   }
 );
 
+async function sweepStuckJobs() {
+  try {
+    const cutoff = new Date(Date.now() - GENERATION_JOB_TIMEOUT_MS);
+    const stuck = await prisma.generationJob.findMany({
+      where: {
+        status: GenerationJobStatus.RUNNING,
+        startedAt: { lt: cutoff }
+      },
+      select: { id: true }
+    });
+
+    if (stuck.length === 0) {
+      return;
+    }
+
+    await prisma.generationJob.updateMany({
+      where: {
+        id: { in: stuck.map((job) => job.id) },
+        status: GenerationJobStatus.RUNNING
+      },
+      data: {
+        status: GenerationJobStatus.FAILED,
+        error: "生成任务超时未完成，已被系统自动结束，请重试。",
+        finishedAt: new Date()
+      }
+    });
+    console.warn(`Swept ${stuck.length} stuck generation job(s).`);
+  } catch (error) {
+    console.error("Failed to sweep stuck generation jobs", error);
+  }
+}
+
+let stuckJobSweeper: ReturnType<typeof setInterval> | null = null;
+
 async function main() {
   console.log(`Generator worker started. Listening on BullMQ queue "${GENERATION_QUEUE_NAME}"...`);
 
   generationWorker.on("failed", (job, error) => {
     console.error(`Queue job ${job?.id ?? "unknown"} failed`, error);
   });
+
+  await sweepStuckJobs();
+  stuckJobSweeper = setInterval(() => {
+    void sweepStuckJobs();
+  }, STUCK_JOB_SWEEP_INTERVAL_MS);
 }
 
-process.on("SIGINT", async () => {
+async function shutdown() {
+  if (stuckJobSweeper) {
+    clearInterval(stuckJobSweeper);
+    stuckJobSweeper = null;
+  }
   await generationWorker.close();
   await prisma.$disconnect();
   process.exit(0);
-});
+}
 
-process.on("SIGTERM", async () => {
-  await generationWorker.close();
-  await prisma.$disconnect();
-  process.exit(0);
-});
+process.on("SIGINT", shutdown);
+
+process.on("SIGTERM", shutdown);
 
 main().catch(async (error) => {
   console.error(error);
