@@ -1,8 +1,11 @@
 import { BuildInputError } from "./game-build-archive";
+import { publicRequestUrl } from "./request-origin";
 
-export function checkStudioRequest(request: Request, appUrl: string) {
+export function checkStudioRequest(request: Request, appUrl: string, trustedRailwayProxy = false) {
   const origin = new URL(appUrl).origin;
-  if (new URL(request.url).origin !== origin || request.headers.get("origin") !== origin) throw new BuildInputError("请求来源不正确，请从作品工作台操作。");
+  try {
+    if (new URL(publicRequestUrl(request, trustedRailwayProxy)).origin !== origin || request.headers.get("origin") !== origin) throw new Error("Origin mismatch.");
+  } catch { throw new BuildInputError("请求来源不正确，请从作品工作台操作。"); }
 }
 export async function readBoundedBody(request: Request, limit: number) {
   const length = request.headers.get("content-length");

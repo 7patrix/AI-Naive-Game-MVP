@@ -5,7 +5,7 @@ import { BuildInputError } from "./game-build-archive";
 import { checkStudioRequest } from "./game-build-request";
 
 export async function studioAuthor(request: Request) {
-  checkStudioRequest(request, env.APP_URL);
+  checkStudioRequest(request, env.APP_URL, Boolean(process.env.RAILWAY_PROJECT_ID));
   const user = await getCurrentUser();
   if (!user || !isAdminUser(user)) throw new BuildInputError("当前只开放平台作者上传，请使用作者账号登录。");
   return user;

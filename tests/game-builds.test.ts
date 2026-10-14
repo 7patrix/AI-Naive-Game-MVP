@@ -8,6 +8,7 @@ import { BUILD_LIMITS, crc32, readGodotArchive, validateBuildPath } from "../src
 import { buildSecurityHeaders, canReadBuild, decryptBuildFile, encryptBuildFile, gameRuntimeOrigin, hashPreviewToken, issuePreviewToken, runtimeOrigin } from "../src/lib/game-build-security";
 import { addGodotBridge, requireGameRuntimeHost, runtimeHostAccess } from "../src/lib/game-build-runtime";
 import { checkStudioRequest, readBoundedBody } from "../src/lib/game-build-request";
+import { publicRequestUrl } from "../src/lib/request-origin";
 
 type Item = { name: string; bytes: Buffer; declaredSize?: number; symlink?: boolean; descriptor?: boolean; deflate?: boolean; compressionFlags?: number };
 const fixture = (): Item[] => [
@@ -128,6 +129,26 @@ test("draft grants cannot cross owners, versions, expiry or activation", () => {
 test("studio writes reject cross-origin and forged host requests", () => {
   checkStudioRequest(new Request("https://app.example/api/studio", { headers: { origin: "https://app.example" } }), "https://app.example");
   assert.throws(() => checkStudioRequest(new Request("https://app.example/api/studio"), "https://app.example")); assert.throws(() => checkStudioRequest(new Request("https://evil.example/api/studio", { headers: { origin: "https://app.example" } }), "https://app.example"));
+});
+test("trusted Railway authority restores HTTPS without retaining the internal port", () => {
+  const request = new Request("http://localhost:8080/api/studio?probe=1", { headers: { host: "app.example", "x-forwarded-proto": "https", origin: "https://app.example" } });
+  assert.equal(publicRequestUrl(request, true), "https://app.example/api/studio?probe=1");
+  assert.equal(publicRequestUrl(request), request.url);
+  checkStudioRequest(request, "https://app.example", true);
+  assert.throws(() => checkStudioRequest(request, "https://app.example"));
+});
+test("proxy authority does not bypass cross-origin, host, protocol or ambiguity checks", () => {
+  const request = (host: string, protocol: string, origin = "https://app.example") => new Request("http://localhost:8080/api/studio", { headers: { host, "x-forwarded-proto": protocol, origin } });
+  for (const input of [request("evil.example", "https"), request("app.example", "http"), request("app.example", "https", "https://evil.example"), request("app.example,evil.example", "https"), request("app.example", "https,http"), request("app.example@evil.example", "https")]) assert.throws(() => checkStudioRequest(input, "https://app.example", true));
+});
+test("restored proxy authority retains the per-game runtime boundary", () => {
+  const gameId = "00000000-0000-4000-8000-000000000001";
+  const request = new Request("http://localhost:8080/runtime/builds/v1/index.html", { headers: { host: `g-${gameId}.games.example`, "x-forwarded-proto": "https" } });
+  const url = publicRequestUrl(request, true);
+  assert.equal(runtimeHostAccess(url, "https://app.example", "https://games.example", true), "runtime");
+  assert.equal(runtimeHostAccess(url.replace("/runtime/builds/v1/index.html", "/account/profile"), "https://app.example", "https://games.example", true), "deny");
+  requireGameRuntimeHost(url, "https://app.example", "https://games.example", true, gameId);
+  assert.throws(() => requireGameRuntimeHost(url, "https://app.example", "https://games.example", true, "00000000-0000-4000-8000-000000000002"));
 });
 test("upload body limits apply to actual bytes, not only Content-Length", async () => {
   const request = (body: string, headers?: Record<string, string>) => new Request("https://app.example", { method: "POST", body, headers });
