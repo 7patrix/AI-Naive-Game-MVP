@@ -1,0 +1,726 @@
+{
+  "q_01": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "门又响了。还是两下。",
+      "en": "The door again. Two knocks, as always."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_02"
+      }
+    ]
+  },
+  "q_02": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "送信人",
+      "en": "The courier"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "你在等第三下？",
+      "en": "Are you waiting for a third?"
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "听她说下去",
+          "en": "Hear her out"
+        },
+        "next": "q_03"
+      }
+    ]
+  },
+  "q_03": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "从前有人这样敲门。已经很久了。",
+      "en": "Someone used to knock that way. A long time ago."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_04"
+      }
+    ]
+  },
+  "q_04": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "我知道是风。可耳朵不肯信。",
+      "en": "I know it is the wind. My ears refuse to believe it."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_05"
+      }
+    ]
+  },
+  "q_05": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "门就在那边。",
+      "en": "The door is just over there."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "我去看看",
+          "en": "I will take a look"
+        },
+        "action": "q_accept"
+      },
+      {
+        "text": {
+          "zh": "晚些再说",
+          "en": "Perhaps later"
+        },
+        "action": "close"
+      }
+    ]
+  },
+  "q_06": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "门边的铜扣",
+      "en": "The door knocker"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "铜扣被风掀起，轻轻磕着门板。",
+      "en": "The wind lifts the brass knocker. It taps softly against the door."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_07"
+      }
+    ]
+  },
+  "q_07": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "门边的铜扣",
+      "en": "The door knocker"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "门边的旧系绳松了，仍够打个结。",
+      "en": "The old cord beside the door has come loose. There is still enough to tie a knot."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "看清了",
+          "en": "I see"
+        },
+        "action": "q_inspect_done"
+      },
+      {
+        "text": {
+          "zh": "先不动",
+          "en": "Leave it for now"
+        },
+        "action": "close"
+      }
+    ]
+  },
+  "q_08": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "老柯",
+      "en": "Old Ke"
+    },
+    "portrait": "clockmaker",
+    "body": {
+      "zh": "那不是门外的东西。是铜扣。",
+      "en": "There is nothing outside. It is the brass knocker."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_09"
+      }
+    ]
+  },
+  "q_09": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "老柯",
+      "en": "Old Ke"
+    },
+    "portrait": "clockmaker",
+    "body": {
+      "zh": "门边那截绳，重新打个活结就行。",
+      "en": "Retie the cord by the door. A slipknot will do."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_10"
+      }
+    ]
+  },
+  "q_10": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "老柯",
+      "en": "Old Ke"
+    },
+    "portrait": "clockmaker",
+    "body": {
+      "zh": "留点余地。想开门时，还得开。",
+      "en": "Leave some slack. She must still be able to open the door."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "我记住了",
+          "en": "I will remember"
+        },
+        "action": "q_hint_done"
+      }
+    ]
+  },
+  "q_11": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "闻弦",
+      "en": "Wen-Xian"
+    },
+    "portrait": "apothecary",
+    "body": {
+      "zh": "又在听门了？",
+      "en": "Listening to the door again?"
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_12"
+      }
+    ]
+  },
+  "q_12": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "闻弦",
+      "en": "Wen-Xian"
+    },
+    "portrait": "apothecary",
+    "body": {
+      "zh": "替我捎句话。",
+      "en": "Take her a message for me."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_13"
+      }
+    ]
+  },
+  "q_13": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "闻弦",
+      "en": "Wen-Xian"
+    },
+    "portrait": "apothecary",
+    "body": {
+      "zh": "我还醒着。灯也还亮着。",
+      "en": "I am still awake. My lamp is still lit."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_14"
+      }
+    ]
+  },
+  "q_14": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "闻弦",
+      "en": "Wen-Xian"
+    },
+    "portrait": "apothecary",
+    "body": {
+      "zh": "别学那三下。说是我就好。",
+      "en": "Do not copy those three knocks. Just say it is from me."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "我会转告阿槐",
+          "en": "I will tell A-Huai"
+        },
+        "action": "q_reply_done"
+      }
+    ]
+  },
+  "q_15": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "门边的铜扣",
+      "en": "The door knocker"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "用门上的旧系绳固定铜扣？\n活结可以解开；不使用随身物品。",
+      "en": "Secure the knocker with the old cord on the door?\nThe slipknot can be undone. No inventory item is used."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "打一个活结",
+          "en": "Tie a slipknot"
+        },
+        "action": "q_tie"
+      },
+      {
+        "text": {
+          "zh": "先不动",
+          "en": "Leave it for now"
+        },
+        "action": "close"
+      }
+    ]
+  },
+  "q_16": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "…安静了。",
+      "en": "…Quiet."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_17"
+      }
+    ]
+  },
+  "q_17": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "我总怕一系上，就真没人来了。",
+      "en": "I feared that tying it would mean nobody would ever come."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_18"
+      }
+    ]
+  },
+  "q_18": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "送信人",
+      "en": "The courier"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "是活结。想开，随时能开。",
+      "en": "It is a slipknot. You can open it whenever you wish."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_19"
+      }
+    ]
+  },
+  "q_19": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "那就这样。今晚我先歇歇。",
+      "en": "Then leave it so. Tonight, I will rest."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "让她歇一会儿",
+          "en": "Let her rest"
+        },
+        "action": "q_complete"
+      }
+    ]
+  },
+  "q_20": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "送信人",
+      "en": "The courier"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "闻弦让我转告：人还醒着，灯也亮着。",
+      "en": "Wen-Xian asked me to tell you: she is still awake, and her lamp is still lit."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "转告闻弦的原话",
+          "en": "Pass on Wen-Xian’s message"
+        },
+        "action": "q_convey"
+      },
+      {
+        "text": {
+          "zh": "再想想",
+          "en": "Not yet"
+        },
+        "action": "close"
+      }
+    ]
+  },
+  "q_21": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "闻弦还醒着？",
+      "en": "Wen-Xian is still awake?"
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_22"
+      }
+    ]
+  },
+  "q_22": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "送信人",
+      "en": "The courier"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "嗯。还特意说，别学别人敲门。",
+      "en": "Yes. She also asked me not to copy someone else’s knock."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_23"
+      }
+    ]
+  },
+  "q_23": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "…那两下，就让它响着吧。",
+      "en": "…Let those two knocks sound, then."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "继续",
+          "en": "Continue"
+        },
+        "next": "q_24"
+      }
+    ]
+  },
+  "q_24": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "我听见别的回话了。",
+      "en": "I have heard another answer."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "陪她坐一会儿",
+          "en": "Stay with her a moment"
+        },
+        "action": "q_complete"
+      }
+    ]
+  },
+  "q_25": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "现在听得见屋里的声音了。",
+      "en": "Now I can hear the sounds inside."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "回到镇上的话题",
+          "en": "Back to town matters"
+        },
+        "action": "q_revisit_done"
+      }
+    ]
+  },
+  "q_26": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "门还响。我没再数。",
+      "en": "The door still knocks. I have stopped counting."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "回到镇上的话题",
+          "en": "Back to town matters"
+        },
+        "action": "q_revisit_done"
+      }
+    ]
+  },
+  "q_active": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "门上的铜扣还松着。也许闻弦还醒着。",
+      "en": "The knocker is still loose. Perhaps Wen-Xian is still awake."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "我再去看看",
+          "en": "I will take another look"
+        },
+        "action": "close"
+      }
+    ]
+  },
+  "q_done": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "阿槐",
+      "en": "A-Huai"
+    },
+    "portrait": "innkeeper",
+    "body": {
+      "zh": "今夜的话已经带到了。",
+      "en": "Tonight’s words have reached her."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "回到镇上的话题",
+          "en": "Back to town matters"
+        },
+        "action": "close"
+      }
+    ]
+  },
+  "q_tied": {
+    "title": {
+      "zh": "门外第三声",
+      "en": "The Third Knock"
+    },
+    "speaker": {
+      "zh": "门边的铜扣",
+      "en": "The door knocker"
+    },
+    "portrait": "",
+    "body": {
+      "zh": "铜扣被活结轻轻固定着。旧绳仍在门上。",
+      "en": "A loose slipknot holds the knocker still. The old cord remains on the door."
+    },
+    "options": [
+      {
+        "text": {
+          "zh": "离开门边",
+          "en": "Step away"
+        },
+        "action": "close"
+      }
+    ]
+  }
+}

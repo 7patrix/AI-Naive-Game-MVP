@@ -1,12 +1,14 @@
 {
-  "version": "20261009-e28ec8c25661",
+  "version": "20261014-slice1-6177294d304a",
   "assetDirectory": "game-exports/moonkiller",
-  "acceptedAt": "2026-10-09T14:46:23.965197Z",
+  "sourceCommit": "47b181e59a3de717aeb20fe8e88f38cbba8efd44",
+  "engine": "Godot 4.7.2 stable; Web no threads",
+  "content": "first-night-third-knock-1",
   "files": {
     "index.html": {
       "mime": "text/html; charset=utf-8",
       "bytes": 5352,
-      "sha256": "bc646400c3ef2f31df7096a669b97dff78ee283397372c31679f4696d3c6f4a8"
+      "sha256": "261a6cba417f6c02461ab8313d0d6b0ac2f6bd89153aa989792fe840d8194bbd"
     },
     "index.js": {
       "mime": "text/javascript; charset=utf-8",
@@ -15,8 +17,8 @@
     },
     "index.pck": {
       "mime": "application/octet-stream",
-      "bytes": 58157872,
-      "sha256": "e28ec8c256613d8f665d3c34461fd68e4b5c96bc1febd17fde9acb1479842203"
+      "bytes": 59486556,
+      "sha256": "6177294d304a6d800fa652473976a0b0b4699bb16cb030e6767f0d7fbda37d3c"
     },
     "index.wasm": {
       "mime": "application/wasm",

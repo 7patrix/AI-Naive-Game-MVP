@@ -1,0 +1,6 @@
+.godot/
+.runtime/
+exports/
+evidence/
+*.log
+*.tmp

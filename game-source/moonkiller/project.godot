@@ -1,0 +1,35 @@
+; MoonKiller / Mothwake — original illustrated 2.5D scene slice.
+config_version=5
+
+[application]
+config/name="MoonKiller · Mothwake"
+run/main_scene="res://scenes/town.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/description="An original ink-and-watercolor town. Follow the lanterns."
+
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/size/window_width_override=1280
+window/size/window_height_override=800
+window/size/resizable=true
+window/stretch/mode="disabled"
+window/size/min_width=720
+window/size/min_height=540
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/default_filters/use_nearest_texture_filter=false
+anti_aliasing/quality/msaa_3d=1
+environment/defaults/default_clear_color=Color(0.13, 0.16, 0.17, 1)
+
+[audio]
+driver/enable_input=false
+
+[physics]
+common/physics_ticks_per_second=60
+
+[debug]
+gdscript/warnings/treat_warnings_as_errors=false

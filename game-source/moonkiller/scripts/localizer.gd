@@ -1,0 +1,47 @@
+extends RefCounted
+
+const TEXT = {
+	"Behind wall":"墙后",
+	"MOONKILLER  /  A LANTERN TALE":"MOONKILLER  /  提灯夜话",
+	"Mothwake":"蛾灯镇",
+	"The town that forgot the dawn.":"一座遗忘了黎明的小镇。",
+	"TONIGHT'S ERRAND":"今夜的差事",
+	"Read the notice beside the old well.":"去旧井旁的公告牌读一读告示。",
+	"NIGHTFALL  ·  OLD TOWN":"夜幕降临  ·  旧镇",
+	"WASD / ARROWS   Walk     SHIFT   Hurry":"WASD / 方向键  移动     Shift  加快",
+	"E   Interact       ESC   Pause       R   Return to arrival":"E  互动    ESC  暂停    R  回到抵达点",
+	"Sound: off":"声音：静音",
+	"Sound: low":"声音：低音量",
+	"Pause  II":"暂停 [ESC]",
+	"The inn is open. A small light survives.":"旅店已开锁。今夜仍有一盏灯亮着。",
+	"Bring the brass key to the Moth & Ember inn.":"带着铜钥匙，去左侧的蛾与余烬旅店。",
+	"Lower the bucket into the old well.":"把木桶放进旧井，寻找铜钥匙。",
+	"Follow the lamps. The noticeboard has a story to tell.":"循着灯光走吧。旧井旁的告示等着你。",
+	"Read the fading notice":"阅读褪色的告示",
+	"Lower the bucket":"放下木桶",
+	"Knock at the Moth & Ember":"敲一敲蛾与余烬旅店的门",
+	"Listen to the well":"听一听井中的回声",
+	"Turn the brass key":"转动铜钥匙",
+	"Rest at the open inn":"在旅店门前歇一会儿",
+	"To the last traveler":"致最后一位旅人",
+	"A notice in fading ink":"一纸褪色的告示",
+	"The innkeeper left a brass key in the well.\n\nLower the bucket. Bring back what the dark has borrowed. The Moth & Ember still has a room for you.\n\nPlease leave one light burning.":"旅店主人把一把铜钥匙留在了井里。\n\n放下木桶，带回被黑夜借走的东西。蛾与余烬旅店，仍为你留着一间房。\n\n请让一盏灯继续亮着。",
+	"Fold the notice  ·  E":"收起告示 [E / ESC]",
+	"Let the night wait.":"让黑夜等一等。",
+	"Paused":"已暂停",
+	"Move with WASD or arrows. Hold Shift to hurry.\nE reads, retrieves and opens. R returns you to arrival.":"WASD / 方向键：移动。按住 Shift：加快。\nE：阅读、取物、开锁。R：回到抵达点，保留进度。\nESC：暂停或返回街道。",
+	"Master volume  ·  muted by default":"主音量 · 默认静音",
+	"Return to the street  ·  ESC":"返回街道 [ESC]",
+	"Begin this night again":"重新开始这一夜",
+	"Back beneath the first lamp.":"回到第一盏灯下，差事的进度仍在。",
+	"Only a ripple answers. You have what you came for.":"只有涟漪回应你。你已经找到了需要的东西。",
+	"A rope, a bucket, a story. Read the nearby notice first.":"一根绳、一只桶、一段故事。先读读旁边的告示吧。",
+	"The rope creaks. Something brass glints in the water...":"绳索吱呀作响。水中闪过一点铜色……",
+	"Three hollow knocks. The lock is cold. Try the noticeboard.":"三声空洞的敲门声。门锁冰冷，去公告牌找找线索吧。",
+	"The key turns. Warmth spills across the stones. You are welcome here.":"钥匙转动，暖光漫过石板。这里欢迎你。",
+	"A room, a lamp, and a moment's rest. The night can wait.":"一间房、一盏灯、片刻安宁。黑夜可以等一等。",
+	"A brass key. The moth-shaped bow is still warm.":"一把铜钥匙。蛾形的钥匙柄，还留着余温。"
+}
+
+static func translate(source: String, language: String) -> String:
+	return TEXT.get(source,source) if language == "zh" else source

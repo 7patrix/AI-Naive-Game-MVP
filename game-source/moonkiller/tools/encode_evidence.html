@@ -1,0 +1,49 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Native evidence encoder</title>
+<style>body{background:#182522;color:#e8dfc7;font:16px system-ui;padding:24px}canvas,video{max-width:90vw;border:1px solid #776f53}button,a{font:inherit;padding:12px;margin:12px 0;color:#192722;background:#dbcdab;display:inline-block}#status{white-space:pre-wrap}</style>
+<h1>Encode chronological native captures</h1><p>Local WebCodecs packaging utility. Every source frame keeps its timestamp. No realtime tab timers.</p>
+<button id="start">Encode native recording</button><pre id="status">Waiting</pre><canvas id="view" width="960" height="600"></canvas><br><video id="result" muted controls></video><br><a id="download" hidden>Download WebM</a>
+<script>
+// Minimal video-only WebM muxing: https://www.matroska.org/technical/elements.html
+const args=new URLSearchParams(location.search),source=args.get('source')||'experience_v5',traceName=args.get('trace')||'continuous_trace.json',output=args.get('name')||'experience_continuous_v5';
+const status=document.querySelector('#status'),canvas=document.querySelector('#view'),context=canvas.getContext('2d');
+const concat=(...items)=>{const result=new Uint8Array(items.reduce((s,a)=>s+a.length,0));let i=0;for(const a of items){result.set(a,i);i+=a.length}return result};
+const hex=s=>new Uint8Array(s.match(/../g).map(x=>parseInt(x,16)));
+const size=n=>{let length=1;while(n>=2**(7*length)-1)length++;const data=new Uint8Array(length);for(let i=length-1;i>=0;i--){data[i]=n%256;n=Math.floor(n/256)}data[0]|=1<<(8-length);return data};
+const uint=n=>{let length=1;while(n>=2**(8*length))length++;const data=new Uint8Array(length);for(let i=length-1;i>=0;i--){data[i]=n%256;n=Math.floor(n/256)}return data};
+const text=s=>new TextEncoder().encode(s),element=(id,...parts)=>{const data=concat(...parts);return concat(hex(id),size(data.length),data)},u=(id,n)=>element(id,uint(n)),s=(id,t)=>element(id,text(t));
+function webm(chunks,width,height,duration){
+ const head=element('1a45dfa3',u('4286',1),u('42f7',1),u('42f2',4),u('42f3',8),s('4282','webm'),u('4287',4),u('4285',2));
+ const length=new Uint8Array(8);new DataView(length.buffer).setFloat64(0,duration*1000);
+ const info=element('1549a966',u('2ad7b1',1000000),s('4d80','MoonKiller'),s('5741','Native evidence'),element('4489',length));
+ const tracks=element('1654ae6b',element('ae',u('d7',1),u('73c5',1),u('83',1),u('9c',0),s('86','V_VP8'),element('e0',u('b0',width),u('ba',height))));
+ const clusters=[];let start=-1,blocks=[];
+ for(const chunk of chunks){const stamp=Math.round(chunk.timestamp/1000);if(start<0||stamp-start>30000){if(start>=0)clusters.push(element('1f43b675',u('e7',start),...blocks));start=stamp;blocks=[]}const t=stamp-start;blocks.push(element('a3',new Uint8Array([129,(t>>8)&255,t&255,chunk.type==='key'?128:0]),chunk.data))}
+ if(start>=0)clusters.push(element('1f43b675',u('e7',start),...blocks));
+ return new Blob([head,element('18538067',info,tracks,...clusters)],{type:'video/webm'});
+}
+document.querySelector('#start').onclick=async()=>{
+ document.querySelector('#start').disabled=true;
+ try{
+  const trace=await(await fetch('../evidence/'+source+'/'+traceName)).json(),frames=trace.frames,chunks=[];
+  const first=await createImageBitmap(await(await fetch('../evidence/'+source+'/'+frames[0].file)).blob());canvas.width=first.width;canvas.height=first.height;first.close();
+  const config={codec:'vp8',width:canvas.width,height:canvas.height,bitrate:6500000,framerate:15};
+  if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error('VP8 encoder unavailable');
+  let codecError=null;const encoder=new VideoEncoder({output:chunk=>{const data=new Uint8Array(chunk.byteLength);chunk.copyTo(data);chunks.push({timestamp:chunk.timestamp,type:chunk.type,data})},error:e=>codecError=e});encoder.configure(config);
+  for(let i=0;i<frames.length;i++){
+   const bitmap=await createImageBitmap(await(await fetch('../evidence/'+source+'/'+frames[i].file)).blob());context.drawImage(bitmap,0,0);bitmap.close();
+   const timestamp=Math.round((frames[i].time-frames[0].time)*1000000),duration=Math.round(((frames[i+1]?.time||frames[i].time+0.07)-frames[i].time)*1000000);
+   const picture=new VideoFrame(canvas,{timestamp,duration});encoder.encode(picture,{keyFrame:i%45===0});picture.close();
+   if(encoder.encodeQueueSize>8)await new Promise(r=>encoder.addEventListener('dequeue',r,{once:true}));status.textContent='Encoding '+i+' / '+frames.length;
+  }
+  await encoder.flush();encoder.close();if(codecError)throw codecError;chunks.sort((a,b)=>a.timestamp-b.timestamp);
+  if(chunks.length!==frames.length)throw Error('Encoded frame count mismatch');
+  let decoded=0;const decoder=new VideoDecoder({output:frame=>{decoded++;frame.close()},error:e=>codecError=e});decoder.configure({codec:'vp8',codedWidth:canvas.width,codedHeight:canvas.height});
+  for(const chunk of chunks){decoder.decode(new EncodedVideoChunk(chunk));if(decoder.decodeQueueSize>8)await new Promise(r=>decoder.addEventListener('dequeue',r,{once:true}));}
+  await decoder.flush();decoder.close();if(codecError)throw codecError;if(decoded!==frames.length)throw Error('Decoded frame count mismatch');
+  const duration=frames.at(-1).time-frames[0].time+0.07,blob=webm(chunks,canvas.width,canvas.height,duration),url=URL.createObjectURL(blob);
+  const result=document.querySelector('#result');result.src=url;const link=document.querySelector('#download');link.href=url;link.download=output+'.webm';link.hidden=false;
+  const saved=await(await fetch('/save-video?source='+encodeURIComponent(source)+'&name='+encodeURIComponent(output),{method:'POST',headers:{'Content-Type':'video/webm'},body:blob})).json();
+  status.textContent='READY WebM\n'+frames.length+' source / '+chunks.length+' encoded / '+decoded+' decoded frames\n'+duration.toFixed(3)+' seconds\n'+blob.size+' bytes\nSaved: '+saved.saved;
+ }catch(error){status.textContent='ERROR '+error.message;document.querySelector('#start').disabled=false;}
+};
+</script></html>

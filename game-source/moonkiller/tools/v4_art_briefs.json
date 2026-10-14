@@ -1,0 +1,13 @@
+{
+  "created": "2026-10-07",
+  "tool": "built-in imagegen",
+  "record_type": "Production briefs summarized from the generation requests; not verbatim prompt transcripts",
+  "reference": "Only original project courier_0, courier_1, courier_3 and courier_5 assets generated for MoonKiller; no external game assets",
+  "identity": "Small original hooded courier, stitched grey hood with crescent mark, ochre scarf, ragged blue-grey coat, dark cuff boots, anatomical right-hand lantern and left-side satchel",
+  "sources": ["front_sheet.png", "back_sheet.png", "right_sheet.png", "left_sheet.png"],
+  "directions": "Front, back, right profile and separately painted left profile. Same identity and camera angle. Transparent background with generous gutters. No text, grid marks or scenery.",
+  "cells": ["idle", "left contact", "left down", "right passing", "right up / reach", "right contact", "right down", "left passing", "left up / reach"],
+  "animation": "Visible alternating steps, weight transfer, consistent grounded boot scale, restrained arm, lantern and cloak motion; stable facial identity",
+  "processing": "Largest connected alpha body vertical extent removes neighboring-row contamination; same scale within each direction; head horizontal anchor and foot baseline alignment; unchanged RGBA artwork",
+  "runtime": "Stable head cutout and eight phase body cutouts; no mirror; actual distance advances gait"
+}

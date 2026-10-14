@@ -1,0 +1,49 @@
+{
+  "method": "crop, uniform resize, transparent canvas; no repaint",
+  "residents": {
+    "innkeeper": {
+      "source_column": 0,
+      "source_bounds": [
+        53,
+        40,
+        497,
+        996
+      ],
+      "uniform_scale": 0.6485355648535565,
+      "foot_y": 638
+    },
+    "apothecary": {
+      "source_column": 1,
+      "source_bounds": [
+        84,
+        49,
+        437,
+        999
+      ],
+      "uniform_scale": 0.6526315789473685,
+      "foot_y": 638
+    },
+    "clockmaker": {
+      "source_column": 2,
+      "source_bounds": [
+        25,
+        41,
+        482,
+        998
+      ],
+      "uniform_scale": 0.6478578892371996,
+      "foot_y": 638
+    }
+  },
+  "walls": {
+    "source_size": [
+      2172,
+      724
+    ],
+    "crop_width": 1172,
+    "world_size": [
+      12,
+      3.4
+    ]
+  }
+}

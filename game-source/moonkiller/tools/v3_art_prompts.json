@@ -1,0 +1,9 @@
+{
+  "engine": "built-in imagegen",
+  "date": "2026-10-07",
+  "inn_front.png": "Original dark fairytale inn wall texture only: flat orthographic square front elevation, three storeys aged grey plaster and crooked oak half timber, five narrow amber leaded windows on each upper storey, bottom-left dark empty arched doorway, moth ornament, stone course. No roof, side perspective, ground, sky or cast shadows.",
+  "materials.png": "Original ink/watercolor opaque 3x2 square texture atlas, edge-to-edge no borders: three-storey flat side elevation with two amber windows each storey; seamless blue-grey slate shingles; aged dark oak; mossed limestone masonry; flat oak door leaf with iron hinges and moth medallion; cracked parchment plaster. No perspective or scenery.",
+  "fronts.png": "Original ink/watercolor flat wall-only elevations in three equal side-by-side square panels: archive stone Gothic facade and owl relief, apothecary plaster/timber with green door and herb windows, forge soot stone with orange workshop window and hammer ornament. No roofs, sides, ground or labels.",
+  "icons.png": "Original transparent 2x2 icon atlas: antique ochre round engraved moth tavern medallion, Roman numeral amber clock face, sage round sunflower herb emblem, grey round anvil plaque. Straight-on flat circles, no perspective, shadows, chains or poles.",
+  "assembly": "tools/prepare_v3_art.py preserves source pixels and alpha while splitting grids and selecting architectural subtextures. scripts/volume_building.gd assembles actual wall, roof, eave, chimney and door meshes."
+}

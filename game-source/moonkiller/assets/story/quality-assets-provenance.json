@@ -1,0 +1,14 @@
+{
+  "resident_portraits_quality.png": {
+    "library_file_id": "libfile_6c3a5b7989c48191937a60a6cc32609e",
+    "source": "AI generated portrait candidate supplied by the parent task; identity checked locally against the existing npc_sheet.png",
+    "canvas": [1944, 809],
+    "cells": {"innkeeper": [0, 0, 648, 809], "apothecary": [648, 0, 648, 809], "clockmaker": [1296, 0, 648, 809]},
+    "identity": "A-Huai: older gray-haired woman, brown shawl, ledger and keys. Wen-Xian: younger dark-haired woman, green apron, amber medicine bottle. Old Ke: balding gray-haired man, dark blue coat, yellow scarf, cane and watch.",
+    "limits": "Detailed portraits differ from the original small scene figures in rendering style; original scene art is preserved. No age or backstory was changed."
+  },
+  "third_knock_world_geometry": {
+    "source": "Original procedural timber door, brass knocker, slipknot and articulated reach arm created for this quest using the existing timber material",
+    "limits": "This is a 2.5D action extension, not a replacement character skeleton or a new 3D character model."
+  }
+}

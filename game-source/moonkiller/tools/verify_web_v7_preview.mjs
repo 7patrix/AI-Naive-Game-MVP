@@ -1,0 +1,31 @@
+// Verify and photograph the normal local preview in a dedicated browser profile.
+import fs from 'node:fs/promises';
+const qaBrowser=process.argv.includes('--qa-browser');
+const port=qaBrowser?9227:9228;
+const targets=await(await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+const target=targets.find(t=>t.type==='page'&&t.url==='http://127.0.0.1:8765/index.html');
+if(!target)throw new Error('Normal Web preview page missing');
+const ws=new WebSocket(target.webSocketDebuggerUrl);
+await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j;});
+const events=[],pending=new Map();let id=0;
+ws.onmessage=({data})=>{const m=JSON.parse(data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(new Error(JSON.stringify(m.error))):p.resolve(m.result);}}else if(m.method==='Runtime.consoleAPICalled')events.push({type:m.params.type,text:m.params.args.map(a=>a.value??a.description??'').join(' ')});else if(m.method==='Runtime.exceptionThrown')events.push({type:'exception',text:JSON.stringify(m.params)});};
+const call=(method,params={})=>new Promise((resolve,reject)=>{const n=++id;pending.set(n,{resolve,reject});ws.send(JSON.stringify({id:n,method,params}));});
+await call('Runtime.enable');await call('Page.enable');
+if(qaBrowser)await call('Emulation.setDeviceMetricsOverride',{width:1280,height:800,deviceScaleFactor:1,mobile:false});
+await new Promise(r=>setTimeout(r,1500));
+const dom=await call('Runtime.evaluate',{expression:"JSON.stringify({url:location.href,title:document.title,canvas:[document.getElementById('canvas').width,document.getElementById('canvas').height],status:document.getElementById('status')?getComputedStyle(document.getElementById('status')).display:'removed'})",returnByValue:true});
+if(dom.exceptionDetails)throw new Error(JSON.stringify(dom.exceptionDetails));
+const state=JSON.parse(dom.result.value);
+if(!['none','removed'].includes(state.status)||state.canvas.some(n=>n<=0))throw new Error('Normal preview is not ready: '+JSON.stringify(state));
+const shot=await call('Page.captureScreenshot',{format:'png',fromSurface:true});
+await fs.writeFile('MoonKiller/evidence/dialog_v7/web_preview_v7.png',Buffer.from(shot.data,'base64'));
+await fs.writeFile('MoonKiller/evidence/dialog_v7/normal_web_preview_logs.json',JSON.stringify({verified_at:new Date().toISOString(),browser:qaBrowser?'Isolated headless Chrome snapshot':'Dedicated visible Chrome preview',state,events},null,2));
+console.log(JSON.stringify({state,scriptExceptions:events.filter(e=>e.type==='exception').length,ready:events.filter(e=>/READY/.test(e.text))}));
+ws.close();
+// Close only the isolated headless QA browser; keep the visible preview and HTTP server.
+const qa=await(await fetch('http://127.0.0.1:9227/json/version')).json();
+const qaSocket=new WebSocket(qa.webSocketDebuggerUrl);
+await new Promise((r,j)=>{qaSocket.onopen=r;qaSocket.onerror=j;});
+qaSocket.send(JSON.stringify({id:1,method:'Browser.close'}));
+await new Promise(r=>{qaSocket.onclose=r;setTimeout(r,2000);});
+qaSocket.close();
