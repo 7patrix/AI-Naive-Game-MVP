@@ -1,0 +1,2 @@
+# Preserve the accepted Godot export byte-for-byte on Windows and Linux.
+game-exports/** -text whitespace=-blank-at-eof

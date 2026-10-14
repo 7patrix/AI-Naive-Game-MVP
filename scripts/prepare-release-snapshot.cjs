@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const destination = path.join(root, '.release-preflight', `source-${Date.now()}`);
-const inputs = ['src', 'workers', 'prisma', 'public', 'tests', 'scripts',
+const inputs = ['src', 'workers', 'prisma', 'public', 'tests', 'scripts', 'game-exports',
   'package.json', 'package-lock.json', 'next.config.mjs', 'next-env.d.ts',
   'tsconfig.json', 'tailwind.config.ts', 'postcss.config.mjs'];
 fs.mkdirSync(destination, { recursive: true });
