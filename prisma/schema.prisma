@@ -13,6 +13,22 @@ enum GameStatus {
   ARCHIVED
 }
 
+enum GameRuntime {
+  HTML
+  GODOT_WEB
+}
+
+enum PlannedPlayMode {
+  SINGLE_PLAYER
+  MULTIPLAYER
+  BOTH
+}
+
+enum BuildStatus {
+  DRAFT
+  PUBLISHED
+}
+
 enum GenerationJobStatus {
   PENDING
   RUNNING
@@ -163,6 +179,8 @@ model Game {
   coverUrl             String?
   tags                 String[]
   status               GameStatus      @default(DRAFT)
+  runtime              GameRuntime     @default(HTML)
+  plannedPlayMode       PlannedPlayMode @default(SINGLE_PLAYER)
   manifestUrl          String?
   bundleUrl            String?
   storagePrefix        String?
@@ -305,6 +323,10 @@ model GameVersion {
   storagePrefix String
   jobId         String?
   changeSummary String
+  buildStatus   BuildStatus      @default(PUBLISHED)
+  buildFiles    Json?
+  engineVersion String?
+  previewSessions BuildPreviewSession[]
   createdAt     DateTime        @default(now())
   game          Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
   job           GenerationJob?  @relation("JobVersions", fields: [jobId], references: [id], onDelete: SetNull)
@@ -314,6 +336,21 @@ model GameVersion {
   @@unique([gameId, versionNumber])
   @@index([jobId])
   @@index([createdAt])
+}
+
+model BuildPreviewSession {
+  id                 String      @id @default(cuid())
+  versionId          String
+  userId             String
+  tokenHash          String      @unique
+  bootstrapExpiresAt DateTime
+  expiresAt          DateTime
+  activatedAt        DateTime?
+  createdAt          DateTime    @default(now())
+  version            GameVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId, versionId])
 }
 
 model AgentLog {

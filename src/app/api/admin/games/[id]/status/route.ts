@@ -25,6 +25,11 @@ export async function POST(request: NextRequest, { params }: AdminGameStatusRout
     return NextResponse.redirect(new URL("/admin?error=invalid-status", env.APP_URL), { status: 303 });
   }
 
+  const existingGame = await db.game.findUnique({ where: { id }, select: { runtime: true } });
+  if (existingGame?.runtime === "GODOT_WEB" && status === GameStatus.PUBLISHED) {
+    return NextResponse.redirect(new URL("/studio", env.APP_URL), { status: 303 });
+  }
+
   const game = await db.game.update({
     where: { id },
     data: {

@@ -48,6 +48,8 @@ const envSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   S3_PUBLIC_BASE_URL: z.string().url().default("http://localhost:9000/ai-arcade"),
+  GAME_RUNTIME_URL: z.string().url().optional(),
+  GAME_BUILD_ENCRYPTION_SECRET: z.string().min(32).optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   MODEL_NAME: z.string().default("gpt-5.5"),

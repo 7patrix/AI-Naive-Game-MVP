@@ -51,6 +51,13 @@ function runWithTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
 
 type Job = NonNullable<Awaited<ReturnType<typeof claimJob>>>;
 type JobModelConfig = ModelClientConfig | null;
+type CoverMotif = "orbs" | "grid" | "waves" | "stars" | "shards" | "circuit" | "bokeh" | "mountains";
+type CoverConcept = {
+  palette: [string, string, string];
+  accent: string;
+  motif: CoverMotif;
+  mood: string;
+};
 type GameSpec = {
   title: string;
   genre: string;
@@ -58,6 +65,7 @@ type GameSpec = {
   promptSummary: string;
   description: string;
   tags: string[];
+  coverConcept: CoverConcept;
 };
 type InputAsset = {
   id?: string;
@@ -446,16 +454,98 @@ function normalizeTags(value: unknown, fallback: string[]): string[] {
   return [...new Set(tags)].slice(0, 8);
 }
 
+const COVER_MOTIFS: CoverMotif[] = ["orbs", "grid", "waves", "stars", "shards", "circuit", "bokeh", "mountains"];
+
+const GENRE_COVER_PRESETS: Array<{ test: RegExp; concept: CoverConcept }> = [
+  {
+    test: /(恐怖|惊悚|悬疑|逃离|逃脱|monster|horror|escape|thriller)/i,
+    concept: { palette: ["#0f172a", "#1e1b4b", "#7f1d1d"], accent: "#ef4444", motif: "shards", mood: "紧张压迫的生存体验" }
+  },
+  {
+    test: /(科幻|太空|机甲|赛博|cyber|sci-?fi|space|mecha|robot)/i,
+    concept: { palette: ["#020617", "#0e7490", "#7c3aed"], accent: "#22d3ee", motif: "circuit", mood: "高速前进的科幻世界" }
+  },
+  {
+    test: /(解谜|益智|逻辑|puzzle|logic|match|消除)/i,
+    concept: { palette: ["#1e293b", "#0f766e", "#0ea5e9"], accent: "#34d399", motif: "grid", mood: "烧脑有趣的解谜关卡" }
+  },
+  {
+    test: /(治愈|萌|可爱|休闲|cozy|cute|casual|relax|花园|宠物)/i,
+    concept: { palette: ["#fef3c7", "#fbcfe8", "#a7f3d0"], accent: "#f472b6", motif: "bokeh", mood: "轻松治愈的休闲小品" }
+  },
+  {
+    test: /(冒险|探索|世界|旅程|adventure|explore|journey|rpg|剧情|视觉小说|galgame)/i,
+    concept: { palette: ["#1e1b4b", "#4338ca", "#f59e0b"], accent: "#fbbf24", motif: "mountains", mood: "充满未知的冒险旅程" }
+  },
+  {
+    test: /(海洋|水|海底|冲浪|ocean|water|wave|sea|钓鱼)/i,
+    concept: { palette: ["#082f49", "#0369a1", "#22d3ee"], accent: "#67e8f9", motif: "waves", mood: "清凉流动的水世界" }
+  },
+  {
+    test: /(收集|采集|星|夜|collect|star|night|gem|宝石)/i,
+    concept: { palette: ["#1e1b4b", "#312e81", "#0ea5e9"], accent: "#facc15", motif: "stars", mood: "边收集边探索的乐趣" }
+  }
+];
+
+const DEFAULT_COVER_CONCEPT: CoverConcept = {
+  palette: ["#312e81", "#0ea5e9", "#f97316"],
+  accent: "#f8fafc",
+  motif: "orbs",
+  mood: "AI 生成的互动小游戏"
+};
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  return isHexColor(value) ? (value as string).trim() : fallback;
+}
+
+function deriveCoverConcept(spec: Pick<GameSpec, "genre" | "coreLoop" | "tags" | "description">): CoverConcept {
+  const haystack = [spec.genre, spec.coreLoop, spec.description, ...(spec.tags ?? [])].join(" ");
+  const preset = GENRE_COVER_PRESETS.find((entry) => entry.test.test(haystack));
+  return preset ? preset.concept : DEFAULT_COVER_CONCEPT;
+}
+
+function normalizeCoverConcept(value: unknown, fallback: CoverConcept): CoverConcept {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+  const rawPalette = Array.isArray(record.palette) ? record.palette : [];
+  const palette: [string, string, string] = [
+    normalizeHexColor(rawPalette[0], fallback.palette[0]),
+    normalizeHexColor(rawPalette[1], fallback.palette[1]),
+    normalizeHexColor(rawPalette[2], fallback.palette[2])
+  ];
+
+  const motifRaw = typeof record.motif === "string" ? record.motif.trim().toLowerCase() : "";
+  const motif = (COVER_MOTIFS as string[]).includes(motifRaw) ? (motifRaw as CoverMotif) : fallback.motif;
+
+  return {
+    palette,
+    accent: normalizeHexColor(record.accent, fallback.accent),
+    motif,
+    mood: stringifySpecValue(record.mood, fallback.mood, 40)
+  };
+}
+
 function normalizeGameSpec(value: unknown, fallback: GameSpec): GameSpec {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
+  const genre = stringifySpecValue(record.genre, fallback.genre, 40);
+  const coreLoop = stringifySpecValue(record.coreLoop, fallback.coreLoop, 600);
+  const description = stringifySpecValue(record.description, fallback.description, 1600);
+  const tags = normalizeTags(record.tags, fallback.tags);
+  const conceptFallback = fallback.coverConcept ?? deriveCoverConcept({ genre, coreLoop, tags, description });
+
   return {
     title: stringifySpecValue(record.title, fallback.title, 60),
-    genre: stringifySpecValue(record.genre, fallback.genre, 40),
-    coreLoop: stringifySpecValue(record.coreLoop, fallback.coreLoop, 600),
+    genre,
+    coreLoop,
     promptSummary: stringifySpecValue(record.promptSummary, fallback.promptSummary, 600),
-    description: stringifySpecValue(record.description, fallback.description, 1600),
-    tags: normalizeTags(record.tags, fallback.tags)
+    description,
+    tags,
+    coverConcept: normalizeCoverConcept(record.coverConcept, conceptFallback)
   };
 }
 
@@ -473,48 +563,52 @@ function buildSlug(title: string, jobId: string) {
 function buildFallbackSpec(prompt: string): GameSpec {
   const lowerPrompt = prompt.toLowerCase();
   const summary = prompt.slice(0, 180);
+  const withCover = (base: Omit<GameSpec, "coverConcept">): GameSpec => ({
+    ...base,
+    coverConcept: deriveCoverConcept(base)
+  });
 
   if (/(收集|采集|金币|宝石|星星|collect|coin|gem|star)/i.test(lowerPrompt)) {
-    return {
+    return withCover({
       title: buildTitle(prompt),
       genre: "Collector",
       coreLoop: "玩家移动角色收集发光宝石，同时避开红色危险球，尽可能获得高分。",
       promptSummary: summary,
       description: `根据创意“${prompt.slice(0, 80)}”生成的收集类 Web 小游戏。`,
       tags: ["AI生成", "Collector", "Canvas"]
-    };
+    });
   }
 
   if (/(点击|反应|打地鼠|tap|click|reaction|whack)/i.test(lowerPrompt)) {
-    return {
+    return withCover({
       title: buildTitle(prompt),
       genre: "Reaction",
       coreLoop: "玩家需要快速点击不断出现的目标，连续命中会获得更高分数。",
       promptSummary: summary,
       description: `根据创意“${prompt.slice(0, 80)}”生成的反应点击类 Web 小游戏。`,
       tags: ["AI生成", "Reaction", "Canvas"]
-    };
+    });
   }
 
   if (/(追逐|迷宫|逃离|怪物|chase|maze|escape|monster)/i.test(lowerPrompt)) {
-    return {
+    return withCover({
       title: buildTitle(prompt),
       genre: "Chase",
       coreLoop: "玩家在追逐压力下移动角色，保持距离并尽量存活更久。",
       promptSummary: summary,
       description: `根据创意“${prompt.slice(0, 80)}”生成的追逐生存类 Web 小游戏。`,
       tags: ["AI生成", "Chase", "Canvas"]
-    };
+    });
   }
 
-  return {
+  return withCover({
     title: buildTitle(prompt),
     genre: "Arcade",
     coreLoop: "玩家通过键盘或鼠标操作角色，躲避障碍并获得分数。",
     promptSummary: summary,
     description: `根据创意“${prompt.slice(0, 80)}”生成的轻量级 Web 小游戏。`,
     tags: ["AI生成", "Arcade", "Canvas"]
-  };
+  });
 }
 
 function getRemixContext(job: Job) {
@@ -984,21 +1078,99 @@ function generateGameHtml(spec: GameSpec, job: Job, assetAnalyses: AssetAnalysis
 <!-- generated by job ${job.id} -->`;
 }
 
+function renderCoverMotif(motif: CoverMotif, accent: string): string {
+  switch (motif) {
+    case "grid":
+      return `
+  <g stroke="${accent}" stroke-opacity="0.28" stroke-width="2" fill="none">
+    ${Array.from({ length: 9 }, (_, i) => `<line x1="${i * 150}" y1="0" x2="${300 + i * 90}" y2="675"/>`).join("")}
+    ${Array.from({ length: 6 }, (_, i) => `<line x1="0" y1="${140 + i * 100}" x2="1200" y2="${140 + i * 100}"/>`).join("")}
+  </g>
+  <circle cx="960" cy="150" r="120" fill="${accent}" fill-opacity="0.18"/>`;
+    case "waves":
+      return `
+  <g fill="${accent}">
+    <path d="M0 470 C 200 410, 400 530, 600 470 S 1000 410, 1200 470 L1200 675 L0 675 Z" fill-opacity="0.22"/>
+    <path d="M0 540 C 240 490, 420 600, 640 540 S 1020 490, 1200 545 L1200 675 L0 675 Z" fill-opacity="0.30"/>
+  </g>`;
+    case "stars":
+      return `
+  <g fill="${accent}">
+    ${Array.from({ length: 46 }, (_, i) => {
+      const x = (i * 197 + 60) % 1160 + 20;
+      const y = (i * 133 + 40) % 560 + 20;
+      const r = (i % 5) + 1;
+      return `<circle cx="${x}" cy="${y}" r="${r}" fill-opacity="${0.4 + (i % 4) * 0.15}"/>`;
+    }).join("")}
+    <circle cx="980" cy="150" r="70" fill-opacity="0.16"/>
+  </g>`;
+    case "shards":
+      return `
+  <g fill="${accent}">
+    <polygon points="1000,60 1180,180 1020,300" fill-opacity="0.20"/>
+    <polygon points="120,420 320,520 160,640" fill-opacity="0.16"/>
+    <polygon points="820,460 1040,540 900,660 720,600" fill-opacity="0.22"/>
+  </g>`;
+    case "circuit":
+      return `
+  <g stroke="${accent}" stroke-opacity="0.35" stroke-width="3" fill="none">
+    <path d="M120 560 H360 V360 H620 V180"/>
+    <path d="M980 120 V300 H760 V480 H1080"/>
+    <path d="M60 220 H280 V420"/>
+  </g>
+  <g fill="${accent}">
+    ${["120,560", "360,360", "620,180", "980,120", "760,480", "1080,480", "280,420"].map((p) => `<circle cx="${p.split(",")[0]}" cy="${p.split(",")[1]}" r="9" fill-opacity="0.85"/>`).join("")}
+  </g>`;
+    case "bokeh":
+      return `
+  <g fill="${accent}">
+    ${Array.from({ length: 14 }, (_, i) => {
+      const x = (i * 271 + 90) % 1120 + 40;
+      const y = (i * 173 + 70) % 540 + 30;
+      const r = 24 + (i % 5) * 22;
+      return `<circle cx="${x}" cy="${y}" r="${r}" fill-opacity="${0.08 + (i % 4) * 0.05}"/>`;
+    }).join("")}
+  </g>`;
+    case "mountains":
+      return `
+  <g fill="${accent}">
+    <polygon points="0,675 300,360 560,675" fill-opacity="0.24"/>
+    <polygon points="360,675 720,300 1080,675" fill-opacity="0.18"/>
+    <polygon points="820,675 1080,420 1200,540 1200,675" fill-opacity="0.28"/>
+    <circle cx="980" cy="160" r="72" fill-opacity="0.30"/>
+  </g>`;
+    case "orbs":
+    default:
+      return `
+  <circle cx="980" cy="130" r="88" fill="${accent}" fill-opacity="0.22"/>
+  <circle cx="180" cy="520" r="130" fill="${accent}" fill-opacity="0.16"/>
+  <circle cx="700" cy="90" r="46" fill="${accent}" fill-opacity="0.28"/>`;
+  }
+}
+
 function generateCoverSvg(spec: GameSpec) {
+  const concept = spec.coverConcept ?? deriveCoverConcept(spec);
+  const [c0, c1, c2] = concept.palette;
+  const accent = concept.accent;
   const title = escapeHtml(spec.title);
+  const mood = escapeHtml(concept.mood || "AI 生成互动小游戏");
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
   <defs>
     <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#312e81"/>
-      <stop offset="55%" stop-color="#0ea5e9"/>
-      <stop offset="100%" stop-color="#f97316"/>
+      <stop offset="0%" stop-color="${c0}"/>
+      <stop offset="55%" stop-color="${c1}"/>
+      <stop offset="100%" stop-color="${c2}"/>
+    </linearGradient>
+    <linearGradient id="scrim" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.55"/>
     </linearGradient>
   </defs>
-  <rect width="1200" height="675" fill="url(#g)"/>
-  <circle cx="980" cy="130" r="88" fill="rgba(255,255,255,0.18)"/>
-  <circle cx="180" cy="520" r="130" fill="rgba(255,255,255,0.12)"/>
-  <text x="80" y="330" fill="white" font-family="Arial, sans-serif" font-size="64" font-weight="700">${title}</text>
-  <text x="82" y="390" fill="rgba(255,255,255,0.82)" font-family="Arial, sans-serif" font-size="28">AI 生成互动小游戏</text>
+  <rect width="1200" height="675" fill="url(#g)"/>${renderCoverMotif(concept.motif, accent)}
+  <rect y="360" width="1200" height="315" fill="url(#scrim)"/>
+  <text x="80" y="540" fill="#ffffff" font-family="Arial, sans-serif" font-size="66" font-weight="700">${title}</text>
+  <text x="82" y="596" fill="rgba(255,255,255,0.85)" font-family="Arial, sans-serif" font-size="30">${mood}</text>
 </svg>`;
 }
 
@@ -1228,7 +1400,7 @@ async function runPlannerAgent(job: Job, assetAnalyses: AssetAnalysis[], modelCo
   if (hasModelConfig(modelConfig)) {
     try {
       const modelSpec = await completeJson<unknown>(
-        "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags。若上传素材包含文本/剧本/规则文档，必须优先根据文本里的角色、世界观、玩法规则、场景、台词和分支来设计游戏，而不是只根据用户一句 prompt 发散。",
+        "你是互动游戏策划 Agent。只返回 JSON，不要 Markdown。字段必须包含 title, genre, coreLoop, promptSummary, description, tags, coverConcept。coverConcept 用于自动生成游戏封面，必须是对象且包含：palette(3 个由深到亮、契合题材氛围的十六进制颜色数组，如 [\"#0f172a\",\"#1e3a8a\",\"#38bdf8\"])、accent(1 个用于点缀图形的高对比十六进制颜色)、motif(从 orbs/grid/waves/stars/shards/circuit/bokeh/mountains 中选最贴合玩法与氛围的一个)、mood(不超过 16 字的中文氛围短语)。配色要真正呼应题材：恐怖偏暗冷、治愈偏明亮柔和、科幻偏霓虹冷色。若上传素材包含文本/剧本/规则文档，必须优先根据文本里的角色、世界观、玩法规则、场景、台词和分支来设计游戏，而不是只根据用户一句 prompt 发散。",
         `根据这个用户创意生成一个适合 Web Canvas 小游戏的规格：${job.prompt}\n${getRemixContext(job)}\n\n上传素材分析：\n${assetContext}\n\n如果文本素材像 galgame、视觉小说、剧情脚本或角色设定，请生成包含对话、选择分支、好感度/结局或章节推进的轻量互动游戏规格。如果文本素材像玩法规则文档，请提炼胜负条件、操作方式、关卡目标和计分规则。如果用户要求使用上传素材，请在规格中明确素材用途，例如角色参考、背景风格、剧情台词、关卡规则或 UI 参考。`,
         modelConfig
       );

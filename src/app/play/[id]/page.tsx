@@ -5,6 +5,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { remoteGameManifestSchema, type RemoteGameManifest } from "@/lib/game-manifest";
 import { PlayFrame } from "@/components/PlayFrame";
+import { GameBuildPlayer } from "@/components/GameBuildPlayer";
+import { studioConfiguration } from "@/lib/studio-config";
+import { gameRuntimeOrigin } from "@/lib/game-build-security";
 
 type PlayPageProps = {
   params: Promise<{
@@ -36,6 +39,12 @@ export default async function PlayPage({ params }: PlayPageProps) {
 
   if (!game || game.status !== GameStatus.PUBLISHED) {
     notFound();
+  }
+
+  if (game.runtime === "GODOT_WEB") {
+    const version = await db.gameVersion.findUnique({ where: { gameId_versionNumber: { gameId: game.id, versionNumber: game.currentVersionNumber } } });
+    const config = studioConfiguration();
+    return <div className="page-enter play-page"><div className="breadcrumb"><Link href={`/games/${game.slug}`}>← 返回作品</Link><span>游玩 / v{game.currentVersionNumber}</span></div><header className="play-heading"><div><p className="eyebrow">Duckmole / 开始游玩</p><h1>{game.title}</h1></div><span className="badge badge-live">公开 v{game.currentVersionNumber}</span></header>{version?.buildStatus === "PUBLISHED" && config.origin ? <GameBuildPlayer gameId={game.id} versionId={version.id} title={game.title} runtimeOrigin={gameRuntimeOrigin(config.origin, game.id)} /> : <p className="notice" role="status">游戏暂不可用，请联系作者。</p>}<p className="field-help">多人联机入口将在游戏完成联机接入后开放。</p></div>;
   }
 
   let manifest: RemoteGameManifest | null = null;

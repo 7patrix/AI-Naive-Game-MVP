@@ -36,6 +36,8 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
             className="w-full rounded-xl border border-slate-300 px-4 py-3"
             minLength={8}
             name="password"
+            aria-label="新密码"
+            autoComplete="new-password"
             placeholder="新密码，至少 8 位"
             required
             type="password"
@@ -44,6 +46,8 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
             className="w-full rounded-xl border border-slate-300 px-4 py-3"
             minLength={8}
             name="confirmPassword"
+            aria-label="确认新密码"
+            autoComplete="new-password"
             placeholder="再次输入新密码"
             required
             type="password"

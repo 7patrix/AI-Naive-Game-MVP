@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GameCover } from "@/components/GameCover";
 import { GameStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getUserDisplayName, getUserProfileHref } from "@/lib/user-profile";
@@ -111,203 +112,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const previousHref = buildPageHref({ q: query, tag, sort, pageSize }, Math.max(1, page - 1));
   const nextHref = buildPageHref({ q: query, tag, sort, pageSize }, Math.min(totalPages, page + 1));
 
-  return (
-    <div className="space-y-10">
-      <section className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-slate-950 p-10 text-white shadow-2xl shadow-indigo-200/60">
-        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-indigo-500/30 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
-        <div className="mt-5 grid gap-8 lg:grid-cols-[1.3fr_0.7fr] lg:items-end">
-          <div className="relative">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-indigo-200">
-              AI Native 互动游戏平台
-            </p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight md:text-6xl">
-              把一个想法，变成可以立刻玩的小游戏。
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-              描述你的玩法、上传灵感素材，几分钟内生成可分享的互动游戏。无需写代码，也能快速做出属于你的作品。
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-white/10 transition hover:-translate-y-0.5" href="/create">
-                开始创建
-              </Link>
-              <a className="rounded-2xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-white/10" href="#games">
-                浏览游戏
-              </a>
-            </div>
-          </div>
-          <div className="relative rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur">
-            <p className="text-sm text-indigo-200">创作方式</p>
-            <p className="mt-3 text-2xl font-semibold">
-              想象 &rarr; 生成 &rarr; 分享 &rarr; 游玩
-            </p>
-            <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-2xl bg-white/10 p-4">
-                <p className="text-2xl font-bold">{publishedCount}</p>
-                <p className="mt-1 text-slate-300">可玩作品</p>
-              </div>
-              <div className="rounded-2xl bg-white/10 p-4">
-                <p className="text-2xl font-bold">{allTags.length}</p>
-                <p className="mt-1 text-slate-300">灵感标签</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <section id="games">
-        <div className="mb-5 flex items-end justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-slate-950">发现好玩的作品</h2>
-            <p className="mt-1 text-slate-600">
-              浏览社区创作者生成的小游戏，按兴趣、热度或发布时间找到你的下一局。
-            </p>
-          </div>
-        </div>
-        <form className="mb-6 grid gap-3 rounded-3xl border border-white/70 bg-white/90 p-4 shadow-xl shadow-slate-200/50 backdrop-blur md:grid-cols-[1fr_180px_180px_auto]">
-          <input
-            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-            defaultValue={query}
-            name="q"
-            placeholder="搜索标题、简介、作者或标签"
-            type="search"
-          />
-          <select
-            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-            defaultValue={tag}
-            name="tag"
-          >
-            <option value="">全部标签</option>
-            {allTags.map((tagOption) => (
-              <option key={tagOption} value={tagOption}>
-                {tagOption}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
-            defaultValue={sort}
-            name="sort"
-          >
-            <option value="latest">最新发布</option>
-            <option value="plays">最多游玩</option>
-            <option value="likes">最多点赞</option>
-          </select>
-          <button className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">
-            筛选
-          </button>
-        </form>
-        {games.length > 0 ? (
-          <div className="grid gap-5 md:grid-cols-3">
-            {games.map((game) => (
-              <article
-                className="group overflow-hidden rounded-3xl border border-white/70 bg-white shadow-xl shadow-slate-200/60 transition duration-200 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-200/60"
-                key={game.id}
-              >
-                <div
-                  className="relative h-44 bg-cover bg-center transition duration-300 group-hover:scale-[1.02]"
-                  style={{
-                    backgroundImage: game.coverUrl
-                      ? `url(${game.coverUrl})`
-                      : "linear-gradient(135deg, #c7d2fe, #e0f2fe, #fae8ff)"
-                  }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/55 via-transparent to-transparent" />
-                  <div className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {game.playCount} 次游玩
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="flex flex-wrap gap-2">
-                    {game.tags.map((tag) => (
-                      <span
-                        className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700"
-                        key={tag}
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-slate-950">{game.title}</h3>
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-600">{game.description}</p>
-                  <div className="mt-5 flex items-center justify-between text-xs text-slate-500">
-                    <Link className="inline-flex items-center gap-2 font-semibold text-slate-600 hover:text-indigo-700" href={getUserProfileHref(game.author)}>
-                      {game.author.avatarUrl ? (
-                        <img
-                          alt={getUserDisplayName(game.author)}
-                          className="h-6 w-6 rounded-full object-cover"
-                          src={game.author.avatarUrl}
-                        />
-                      ) : (
-                        <span className="grid h-6 w-6 place-items-center rounded-full bg-slate-900 text-[10px] text-white">
-                          {getUserDisplayName(game.author).slice(0, 1).toUpperCase()}
-                        </span>
-                      )}
-                      {getUserDisplayName(game.author)}
-                    </Link>
-                    <span>{game.likeCount} 赞</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                    <span>发布时间：{game.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}</span>
-                    <span>
-                      {game.likeCount} 赞 / {game.favoriteCount} 收藏
-                    </span>
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <Link
-                      className="inline-flex justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:text-indigo-700"
-                      href={`/games/${game.slug}`}
-                    >
-                      详情
-                    </Link>
-                    <Link
-                      className="inline-flex justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700"
-                      href={`/play/${game.id}`}
-                    >
-                      开始游戏
-                    </Link>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-8 text-center text-slate-600">
-            暂时还没有可玩的作品。来创建第一个游戏吧。
-          </div>
-        )}
-        {totalGames > 0 ? (
-          <div className="mt-8 flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 text-sm text-slate-600 shadow-sm md:flex-row">
-            <span>
-              第 {page} / {totalPages} 页，共 {totalGames} 个匹配游戏
-            </span>
-            <div className="flex gap-2">
-              <Link
-                aria-disabled={page <= 1}
-                className={`rounded-xl border px-4 py-2 font-semibold ${
-                  page <= 1
-                    ? "pointer-events-none border-slate-200 text-slate-300"
-                    : "border-slate-300 text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
-                }`}
-                href={previousHref}
-              >
-                上一页
-              </Link>
-              <Link
-                aria-disabled={page >= totalPages}
-                className={`rounded-xl border px-4 py-2 font-semibold ${
-                  page >= totalPages
-                    ? "pointer-events-none border-slate-200 text-slate-300"
-                    : "border-slate-300 text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
-                }`}
-                href={nextHref}
-              >
-                下一页
-              </Link>
-            </div>
-          </div>
-        ) : null}
-      </section>
-    </div>
-  );
+  return <div className="page-enter">
+    <header className="shelf-heading"><div><p className="eyebrow">Duckmole / 游戏架</p><h1 className="display-title">下一局，<span>从这里开始。</span></h1><p className="page-intro">一个个认真制作的小世界。找到喜欢的作品，打开就玩。</p></div><Link className="button button-quiet" href="/studio">带来你的作品 <span aria-hidden="true">↗</span></Link></header>
+    <section id="games" aria-labelledby="games-heading">
+      <div className="section-title"><h2 id="games-heading">探索作品 <span className="count-label">{publishedCount} 个公开作品</span></h2><span className="utility-label">{sort === "plays" ? "按游玩次数" : sort === "likes" ? "按点赞次数" : "按发布时间"}</span></div>
+      <form className="shelf-filters" action="/" aria-label="筛选游戏"><label className="search-field"><span aria-hidden="true">⌕</span><span className="sr-only">搜索游戏</span><input type="search" name="q" defaultValue={query} placeholder="搜索作品、作者或标签" /></label><label><span className="sr-only">作品标签</span><select name="tag" defaultValue={tag}><option value="">全部标签</option>{allTags.map(t => <option key={t} value={t}>{t}</option>)}</select></label><label><span className="sr-only">排序方式</span><select name="sort" defaultValue={sort}><option value="latest">最新发布</option><option value="plays">最多游玩</option><option value="likes">最多点赞</option></select></label><input type="hidden" name="pageSize" value={pageSize} /><button className="button button-small" type="submit">筛选 <span aria-hidden="true">→</span></button>{query || tag || sort !== "latest" ? <Link className="filter-reset" href="/">清除筛选</Link> : null}</form>
+      {games.length ? <div className={`game-shelf ${games.length === 1 ? "single-game" : ""}`}>{games.map((game, index) => <article className="game-card" key={game.id}>
+        <Link href={`/games/${game.slug}`} className="game-cover-link" aria-label={`查看${game.title}`}><GameCover title={game.title} coverUrl={game.coverUrl} seed={game.id} priority={index === 0} /><span className="cover-open" aria-hidden="true">查看作品 ↗</span></Link>
+        <div className="game-card-content"><div className="game-card-top"><div className="tags">{game.tags.slice(0, 3).map(t => <Link key={t} href={buildPageHref({ q: "", tag: t, sort: "latest", pageSize }, 1)}>{t}</Link>)}</div><span className="utility-label">{game.playCount} 次游玩</span></div><h3><Link href={`/games/${game.slug}`}>{game.title}</Link></h3><p className="game-description">{game.description || "作者还没有填写作品介绍。"}</p><div className="game-card-credit"><Link href={getUserProfileHref(game.author)} className="author-link"><span className="avatar-dot">{game.author.avatarUrl ? <img src={game.author.avatarUrl} alt="" loading="lazy" /> : getUserDisplayName(game.author).slice(0, 1)}</span>{getUserDisplayName(game.author)}</Link><span>{game.publishedAt?.toLocaleDateString("zh-CN") ?? "未发布"}</span></div><div className="game-card-actions"><Link className="button" href={`/play/${game.id}`}>开始游戏 <span aria-hidden="true">↗</span></Link><Link className="text-link" href={`/games/${game.slug}`}>作品详情</Link><span className="card-social">{game.likeCount} 赞 · {game.favoriteCount} 收藏</span></div></div>
+      </article>)}</div> : <div className="empty-state"><span className="empty-mark" aria-hidden="true">＋</span><h3>{query || tag ? "还没有找到这类作品" : "游戏架正在等第一件作品"}</h3><p>{query || tag ? "换个关键词，或清除筛选看看全部作品。" : "上传你的游戏，先试玩，再公开分享。"}</p><Link className="button" href={query || tag ? "/" : "/studio"}>{query || tag ? "查看全部作品" : "打开工作台"}<span aria-hidden="true">→</span></Link></div>}
+      {totalGames > 0 ? <nav className="pagination" aria-label="作品分页"><p>第 <strong>{page}</strong> / {totalPages} 页 · {totalGames} 个匹配作品</p><div>{page > 1 ? <Link className="button button-quiet button-small" href={previousHref}>← 上一页</Link> : <span className="pagination-disabled">← 上一页</span>}{page < totalPages ? <Link className="button button-quiet button-small" href={nextHref}>下一页 →</Link> : <span className="pagination-disabled">下一页 →</span>}</div></nav> : null}
+    </section><aside className="shelf-endnote"><span className="brand-symbol" aria-hidden="true"><i /><i /><i /></span><div><h2>让你的游戏，拥有自己的位置。</h2><p>私有草稿、试玩预览、版本记录与公开发布，都在同一个工作台。</p></div><Link className="text-link" href="/studio">进入工作台 <span aria-hidden="true">↗</span></Link></aside>
+  </div>;
 }

@@ -25,12 +25,16 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         <input
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           name="name"
+          aria-label="昵称"
+          autoComplete="nickname"
           placeholder="昵称"
           type="text"
         />
         <input
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           name="email"
+          aria-label="邮箱"
+          autoComplete="email"
           placeholder="邮箱，例如 test@example.com"
           required
           type="email"
@@ -39,6 +43,8 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           minLength={8}
           name="password"
+          aria-label="密码"
+          autoComplete="new-password"
           placeholder="密码，至少 8 位"
           required
           type="password"
@@ -47,6 +53,8 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           minLength={8}
           name="confirmPassword"
+          aria-label="确认密码"
+          autoComplete="new-password"
           placeholder="再次输入密码"
           required
           type="password"

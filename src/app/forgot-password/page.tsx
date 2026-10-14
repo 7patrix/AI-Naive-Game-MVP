@@ -31,6 +31,8 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
         <input
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           name="email"
+          aria-label="注册邮箱"
+          autoComplete="email"
           placeholder="邮箱，例如 test@example.com"
           required
           type="email"

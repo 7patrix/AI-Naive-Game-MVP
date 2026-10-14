@@ -1,73 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SiteNavigation } from "@/components/SiteNavigation";
 import { getCurrentUser, isAdminUser } from "@/lib/auth";
+import { getUserDisplayName } from "@/lib/user-profile";
 import "./globals.css";
-
-export const metadata: Metadata = {
-  title: "AI 游戏工坊",
-  description: "用 AI 快速创建、分享和游玩互动小游戏"
-};
-
-export default async function RootLayout({
-  children
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export const metadata: Metadata = { title: { default: "Duckmole · 独立游戏工坊", template: "%s · Duckmole" }, description: "制作、发布和游玩你的游戏" };
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await getCurrentUser();
-  const isAdmin = isAdminUser(user);
-
-  return (
-    <html lang="zh-CN">
-      <body>
-        <header className="sticky top-0 z-50 border-b border-white/60 bg-white/80 shadow-sm shadow-slate-200/40 backdrop-blur-xl">
-          <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <Link className="flex items-center gap-2 text-lg font-semibold tracking-tight" href="/">
-              <span className="grid h-9 w-9 place-items-center rounded-2xl bg-slate-950 text-sm text-white shadow-lg shadow-indigo-500/20">
-                AI
-              </span>
-              <span>游戏工坊</span>
-            </Link>
-            <div className="flex items-center gap-4 text-sm font-medium text-slate-600">
-              <Link className="transition hover:text-indigo-700" href="/create">创建</Link>
-              <Link className="transition hover:text-indigo-700" href="/users">创作者</Link>
-              {user ? <Link className="transition hover:text-indigo-700" href="/account/profile">个人资料</Link> : null}
-              {user ? <Link className="transition hover:text-indigo-700" href="/account/api-keys">API 管理</Link> : null}
-              {isAdmin ? <Link className="transition hover:text-indigo-700" href="/admin">管理后台</Link> : null}
-              {user ? (
-                <>
-                  <span className="hidden text-slate-500 sm:inline">{user.email}</span>
-                  <form action="/api/auth/logout" method="post">
-                    <button className="font-medium text-slate-600 transition hover:text-red-600" type="submit">
-                      退出登录
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <Link className="transition hover:text-indigo-700" href="/login">登录</Link>
-                  <Link
-                    className="rounded-full bg-slate-950 px-4 py-2 text-white shadow-lg shadow-slate-950/15 transition hover:-translate-y-0.5 hover:bg-indigo-700"
-                    href="/register"
-                  >
-                    注册
-                  </Link>
-                </>
-              )}
-            </div>
-          </nav>
-        </header>
-        <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
-        <footer className="mx-auto max-w-6xl px-6 pb-8 text-center text-xs text-slate-500">
-          <a
-            className="transition hover:text-indigo-700"
-            href="https://beian.miit.gov.cn/"
-            rel="noreferrer"
-            target="_blank"
-          >
-            浙ICP备2026051458号-1
-          </a>
-        </footer>
-      </body>
-    </html>
-  );
+  return <html lang="zh-CN"><body><a className="skip-link" href="#main-content">跳转到主要内容</a><SiteNavigation user={user ? { name: getUserDisplayName(user), isAdmin: isAdminUser(user) } : null} /><main id="main-content" className="site-main" tabIndex={-1}>{children}</main><footer className="site-footer"><Link href="/" className="footer-brand">duckmole <span>小小世界，认真制作。</span></Link><a href="https://beian.miit.gov.cn/" rel="noreferrer" target="_blank">浙ICP备2026051458号-1</a></footer></body></html>;
 }

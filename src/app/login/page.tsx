@@ -40,6 +40,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <input
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           name="email"
+          aria-label="邮箱"
+          autoComplete="username"
           placeholder="邮箱，例如 creator@example.com"
           required
           type="email"
@@ -47,6 +49,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <input
           className="w-full rounded-xl border border-slate-300 px-4 py-3"
           name="password"
+          aria-label="密码"
+          autoComplete="current-password"
           placeholder="密码"
           required
           type="password"

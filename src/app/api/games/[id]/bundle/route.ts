@@ -13,6 +13,7 @@ export async function GET(_request: Request, { params }: GameBundleRouteProps) {
   const game = await db.game.findFirst({
     where: {
       id,
+      runtime: "HTML",
       status: GameStatus.PUBLISHED
     },
     select: {
